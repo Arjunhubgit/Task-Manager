@@ -1,7 +1,7 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import ProfilePhotoSelector from '../../components/inputs/ProfilePhotoSelector';
-import { FaRocket, FaGoogle, FaCheckCircle } from 'react-icons/fa';
+import { FaRocket, FaGoogle, FaCheckCircle, FaEye, FaEyeSlash } from 'react-icons/fa';
 import { validateEmail } from '../../utils/helper';
 import axiosInstance from '../../utils/axiosInstance';
 import { API_PATHS } from '../../utils/apiPaths';
@@ -55,6 +55,7 @@ const SignUp = () => {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [adminInviteToken, setAdminInviteToken] = useState('');
   const [error, setError] = useState(null);
 
@@ -63,31 +64,35 @@ const SignUp = () => {
 
   // --- 2. ADDED: Google Sign-In Handler ---
   const handleGoogleSignIn = async () => {
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-      
-      const response = await axiosInstance.post(API_PATHS.AUTH.GOOGLE_LOGIN, {
-        name: user.displayName,
-        email: user.email,
-        googlePhotoUrl: user.photoURL,
-      });
+  try {
+    // 1. Authenticate with Firebase Popup
+    const result = await signInWithPopup(auth, googleProvider);
+    const user = result.user;
+    
+    // 2. Send Google Data + THE ADMIN TOKEN to backend
+    const response = await axiosInstance.post(API_PATHS.AUTH.GOOGLE_LOGIN, {
+      name: user.displayName,
+      email: user.email,
+      googlePhotoUrl: user.photoURL,
+      adminInviteToken: adminInviteToken // <--- CRITICAL ADDITION
+    });
 
-      updateUser(response.data);
-      const { role } = response.data;
-      if (role === 'admin') navigate('/admin/dashboard');
-      else navigate('/user/dashboard');
+    updateUser(response.data);
+    const { role } = response.data;
+    
+    // 3. Redirect based on role
+    if (role === 'admin') navigate('/admin/dashboard');
+    else navigate('/user/dashboard');
 
-    } catch (err) {
-      console.error("Google Sign In Error:", err);
-      setError("Google Sign In failed. Please try again.");
-    }
-  };
+  } catch (err) {
+    console.error("Google Sign In Error:", err);
+    setError("Google Sign In failed. Please try again.");
+  }
+};
 
   const handleSignUp = async (e) => {
     e.preventDefault();
-    let profileImageUrl = '';
-
+    let profileImageUrl = "";
     if (!fullName) { setError("Please enter your full name."); return; }
     if (!validateEmail(email)) { setError("Please enter a valid email address."); return; }
     if (!profilePic) { setError("Please upload a profile picture."); return; }
@@ -198,7 +203,16 @@ const SignUp = () => {
                    </div>
                    <div className="space-y-1">
                        <label className="text-gray-400 text-xs font-semibold ml-1">Password</label>
-                       <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Create a strong password" className="w-full bg-white/5 border border-white/10 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 block w-full p-3 outline-none placeholder-gray-600 transition-all hover:bg-white/10" />
+                       <div className="relative">
+                           <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Create a strong password" className="w-full bg-white/5 border border-white/10 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 block w-full p-3 pl-3 pr-10 outline-none placeholder-gray-600 transition-all hover:bg-white/10" />
+                           <button
+                             type="button"
+                             onClick={() => setShowPassword(!showPassword)}
+                             className="absolute right-3 top-3.5 text-gray-500 hover:text-gray-300 transition-colors"
+                           >
+                             {showPassword ? <FaEyeSlash /> : <FaEye />}
+                           </button>
+                       </div>
                    </div>
                    <div className="space-y-1">
                        <label className="text-gray-400 text-xs font-semibold ml-1">Admin Token (Optional)</label>

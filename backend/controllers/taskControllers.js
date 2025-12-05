@@ -1,18 +1,23 @@
 const Task = require("../models/Task");
+const User = require("../models/User"); // Ensure User model is imported for assignment logic
 // 🛠️ FINAL FIX: Safely import fetch, handling both default export and standard import
 const fetched = require('node-fetch');
 const fetch = fetched.default || fetched; 
 
+// --- NEW IMPORT FOR CHAT-TO-TASK FEATURE ---
+const { GoogleGenerativeAI, SchemaType } = require("@google/generative-ai");
+
 const { URLSearchParams } = require('url'); 
 
 // Generate JWT Token (Assuming this function is in authControllers.js, but keeping here for context)
-// NOTE: Ensure your authControllers.js version is the source of truth for token generation.
 const jwt = require("jsonwebtoken");
 const generateToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "30d" }); // Updated to 30d for convenience
+  return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "30d" }); 
 };
 
-// --- AI INTEGRATION: Gemini API Service (Enhanced Logging) ---
+// =====================================================================
+// --- HELPER: AI PRIORITY & SUMMARY (Used inside createTask) ---
+// =====================================================================
 
 const getAIPriorityAndSummary = async (taskDescription, userRole) => {
     const apiKey = process.env.GEMINI_API_KEY || ""; 
@@ -20,7 +25,7 @@ const getAIPriorityAndSummary = async (taskDescription, userRole) => {
 
     if (!apiKey) {
         console.error("CRITICAL ERROR: GEMINI_API_KEY is not set in environment variables. Cannot call AI.");
-        return null; // Fail fast if API key is missing
+        return null; 
     }
     
     const prioritySchema = {
@@ -46,7 +51,6 @@ const getAIPriorityAndSummary = async (taskDescription, userRole) => {
 
     const payload = {
         contents: [{ parts: [{ text: prompt }] }],
-        // 🚨 FIX APPLIED HERE: Using generationConfig instead of config 🚨
         generationConfig: { 
             responseMimeType: "application/json",
             responseSchema: prioritySchema,
@@ -54,19 +58,17 @@ const getAIPriorityAndSummary = async (taskDescription, userRole) => {
     };
 
     try {
-        const response = await fetch(apiUrl, { // Use the corrected 'fetch' function
+        const response = await fetch(apiUrl, { 
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
 
-        // 1. Log the Response Status for initial check
         console.log(`[Gemini Debug] Response Status: ${response.status}`);
 
         const result = await response.json();
 
         if (!response.ok) {
-            // 2. Log API service error details (e.g., 400 or 500 error from Google)
             console.error(`[Gemini Debug] HTTP Error [${response.status}]:`, JSON.stringify(result, null, 2));
             return null; 
         }
@@ -75,30 +77,28 @@ const getAIPriorityAndSummary = async (taskDescription, userRole) => {
         
         if (jsonText) {
             try {
-                // 3. Attempt to parse and return
                 const parsedResult = JSON.parse(jsonText);
                 console.log(`[Gemini Debug] Successfully Parsed AI Output: ${JSON.stringify(parsedResult)}`);
                 return parsedResult;
             } catch (parseError) {
-                // 4. Log JSON parsing errors (common if AI output doesn't match schema)
                 console.error("CRITICAL ERROR: Gemini API JSON PARSE FAILED.");
                 console.error("[Gemini Debug] Raw Text:", jsonText);
-                console.error("[Gemini Debug] Parse Error:", parseError);
                 return null; 
             }
         }
         
-        // 5. Log if content structure is unexpected (e.g., missing candidates)
         console.error("Gemini API failed to return structured text. Raw Result:", JSON.stringify(result, null, 2));
         return null; 
 
     } catch (error) {
-        console.error("Gemini API Network Error (Check connectivity/DNS):", error);
+        console.error("Gemini API Network Error:", error);
         return null; 
     }
 };
 
-// --- CORE CONTROLLERS (Rest of the file remains unchanged) ---
+// =====================================================================
+// --- CORE CONTROLLERS ---
+// =====================================================================
 
 // @desc    Get all tasks (Admin: all, User: only assigned tasks)
 // @route   GET /api/tasks/
@@ -192,34 +192,36 @@ const createTask = async (req, res) => {
         let {
             title,
             description,
-            priority, // Can now be undefined if AI is used
+            priority, 
             dueDate,
             assignedTo,
             todoChecklist,
             attachments,
-            aiSummary = undefined // Ensure this is initialized from the request body or as undefined
+            aiSummary = undefined 
         } = req.body;
 
         if (!Array.isArray(assignedTo)) {
             return res.status(400)
                 .json({ message: "AssignedTo must be an array of user IDs" });
         }
+
+        // Critical Fix: Ensure at least one user is assigned
+        if (assignedTo.length === 0) {
+             return res.status(400).json({ message: "Task must be assigned to at least one user." });
+        }
         
         // ----------------------------------------------------
         // AI PRIORITIZATION LOGIC
         // ----------------------------------------------------
-        // Only run AI if priority is not manually set by the user/client
         if (!priority && description) {
             console.log("[Task Creation] Priority missing. Calling Gemini AI for analysis...");
             const aiResult = await getAIPriorityAndSummary(description, req.user.role);
 
             if (aiResult) {
-                // Overwrite the priority if the AI provided a valid one
                 priority = aiResult.suggestedPriority; 
-                aiSummary = aiResult.aiSummary; // Capture the AI Summary
+                aiSummary = aiResult.aiSummary; 
                 console.log(`[Task Creation] AI suggested priority: ${priority}`);
             } else {
-                // Fallback if AI fails (due to network, API key, or parsing error)
                 priority = 'Medium';
                 console.log("[Task Creation] AI failed to provide a result, defaulting to Medium priority.");
             }
@@ -229,13 +231,13 @@ const createTask = async (req, res) => {
         const task = new Task({
             title,
             description,
-            priority: priority || 'Medium', // Ensure a priority is always set
+            priority: priority || 'Medium', 
             dueDate,
             assignedTo,
             createdBy: req.user._id,
             todoChecklist,
             attachments,
-            aiSummary // <--- Saving the AI summary
+            aiSummary 
         });
         await task.save();
         res.status(201).json({ message: "Task created successfully", task });
@@ -375,7 +377,6 @@ const updateTaskChecklist = async (req, res) => {
 // @access  Private (Admin)
 const getDashboardData = async (req, res) => {
     try {
-        // Fetch statistics
         const totalTasks = await Task.countDocuments();
         const pendingTasks = await Task.countDocuments({ status: "Pending" });
         const completedTasks = await Task.countDocuments({ status: "Completed" });
@@ -384,60 +385,36 @@ const getDashboardData = async (req, res) => {
             dueDate: { $lt: new Date() },
         });
 
-        // Ensure all possible statuses are included
         const taskStatuses = ["Pending", "In Progress", "Completed"];
         const taskDistributionRaw = await Task.aggregate([
-            {
-                $group: {
-                    _id: "$status",
-                    count: { $sum: 1 },
-                },
-            },
+            { $group: { _id: "$status", count: { $sum: 1 } } },
         ]);
 
         const taskDistribution = taskStatuses.reduce((acc, status) => {
-            const formattedKey = status.replace(/\s+/g, ""); // Remove spaces for response key
-            acc[formattedKey] =
-                taskDistributionRaw.find((item) => item._id === status)?.count || 0;
+            const formattedKey = status.replace(/\s+/g, ""); 
+            acc[formattedKey] = taskDistributionRaw.find((item) => item._id === status)?.count || 0;
             return acc;
         }, {});
-        taskDistribution["All"] = totalTasks; // Add total count to taskDistribution
+        taskDistribution["All"] = totalTasks; 
 
-        // Ensure all priority levels are included
         const taskPriorities = ["Low", "Medium", "High"];
         const taskPriorityLevelsRaw = await Task.aggregate([
-            {
-                $group: {
-                    _id: "$priority",
-                    count: { $sum: 1 },
-                },
-            },
+            { $group: { _id: "$priority", count: { $sum: 1 } } },
         ]);
 
         const taskPriorityLevels = taskPriorities.reduce((acc, priority) => {
-            acc[priority] =
-                taskPriorityLevelsRaw.find((item) => item._id === priority)?.count || 0;
+            acc[priority] = taskPriorityLevelsRaw.find((item) => item._id === priority)?.count || 0;
             return acc;
         }, {});
 
-        // Fetch recent 10 tasks (✅ now including priority)
         const recentTasks = await Task.find()
             .sort({ createdAt: -1 })
             .limit(10)
             .select("title description status priority dueDate assignedTo createdAt");
 
-        // Final response
         res.status(200).json({
-            statistics: {
-                totalTasks,
-                pendingTasks,
-                completedTasks,
-                overdueTasks,
-            },
-            charts: {
-                taskDistribution,
-                taskPriorityLevels,
-            },
+            statistics: { totalTasks, pendingTasks, completedTasks, overdueTasks },
+            charts: { taskDistribution, taskPriorityLevels },
             recentTasks,
         });
     } catch (error) {
@@ -450,85 +427,213 @@ const getDashboardData = async (req, res) => {
 // @access  Private (User)
 const getUserDashboardData = async (req, res) => {
     try {
-        const userId = req.user._id; // only fetch data for the logged-in user
-        // Fetch statistics
+        const userId = req.user._id; 
         const totalTasks = await Task.countDocuments({ assignedTo: userId });
-        const pendingTasks = await Task.countDocuments({
-            assignedTo: userId,
-            status: "Pending",
-        });
-        const completedTasks = await Task.countDocuments({
-            assignedTo: userId,
-            status: "Completed",
-        });
+        const pendingTasks = await Task.countDocuments({ assignedTo: userId, status: "Pending" });
+        const completedTasks = await Task.countDocuments({ assignedTo: userId, status: "Completed" });
         const overdueTasks = await Task.countDocuments({
             assignedTo: userId,
             status: { $ne: "Completed" },
             dueDate: { $lt: new Date() },
         });
-        // task distribution by status
+        
         const taskStatuses = ["Pending", "In Progress", "Completed"];
         const taskDistributionRaw = await Task.aggregate([
-            {
-                $match: { assignedTo: userId },
-            },
-            {
-                $group: {
-                    _id: "$status",
-                    count: { $sum: 1 },
-                },
-            },
+            { $match: { assignedTo: userId } },
+            { $group: { _id: "$status", count: { $sum: 1 } } },
         ]);
         const taskDistribution = taskStatuses.reduce((acc, status) => {
-            const formattedKey = status.replace(/\s+/g, ""); // Remove spaces for response key
-            acc[formattedKey] =
-                taskDistributionRaw.find((item) => item._id === status)?.count || 0;
+            const formattedKey = status.replace(/\s+/g, ""); 
+            acc[formattedKey] = taskDistributionRaw.find((item) => item._id === status)?.count || 0;
             return acc;
         }, {});
-        taskDistribution["All"] = totalTasks; // Add total count to taskDistribution
+        taskDistribution["All"] = totalTasks; 
 
-        // task distribution by priority
         const taskPriorities = ["Low", "Medium", "High"];
         const taskPriorityLevelsRaw = await Task.aggregate([
-            {
-                $match: { assignedTo: userId },
-            },
-            {
-                $group: {
-                    _id: "$priority",
-                    count: { $sum: 1 },
-                },
-            },
+            { $match: { assignedTo: userId } },
+            { $group: { _id: "$priority", count: { $sum: 1 } } },
         ]);
         const taskPriorityLevels = taskPriorities.reduce((acc, priority) => {
-            acc[priority] =
-                taskPriorityLevelsRaw.find((item) => item._id === priority)?.count || 0;
+            acc[priority] = taskPriorityLevelsRaw.find((item) => item._id === priority)?.count || 0;
             return acc;
         }, {});
 
-        // Fetch recent 10 tasks for the user (✅ now including priority)
         const recentTasks = await Task.find({ assignedTo: userId })
             .sort({ createdAt: -1 })
             .limit(10)
             .select("title description status priority dueDate createdAt");
 
-        // Final response
         res.status(200).json({
-            statistics: {
-                totalTasks,
-                pendingTasks,
-                completedTasks,
-                overdueTasks,
-            },
-            charts: {
-                taskDistribution,
-                taskPriorityLevels,
-            },
+            statistics: { totalTasks, pendingTasks, completedTasks, overdueTasks },
+            charts: { taskDistribution, taskPriorityLevels },
             recentTasks,
         });     
  } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
     }
+};
+
+// =====================================================================
+// --- NEW CONTROLLER: CREATE TASK FROM AI PROMPT ---
+// =====================================================================
+
+// @desc    Create a task automatically from a natural language prompt
+// @route   POST /api/tasks/ai-create
+// @access  Private
+const createTaskFromAI = async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    
+    if (!prompt) {
+      return res.status(400).json({ message: "Prompt is required" });
+    }
+
+    // Check if API key exists
+    if (!process.env.GEMINI_API_KEY) {
+      console.warn("⚠️ GEMINI_API_KEY not found. Creating basic task from prompt.");
+      return createBasicTaskFromPrompt(req, res, prompt);
+    }
+
+    try {
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      
+      // Try gemini-2.0-flash first, fall back to gemini-1.5-pro
+      let model;
+      try {
+        model = genAI.getGenerativeModel({
+          model: "gemini-2.0-flash",
+          generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: SchemaType.OBJECT,
+              properties: {
+                title: { type: SchemaType.STRING },
+                description: { type: SchemaType.STRING },
+                priority: { type: SchemaType.STRING, enum: ["Low", "Medium", "High"] },
+                dueDate: { type: SchemaType.STRING, description: "ISO 8601 date string" }, 
+                todoChecklist: {
+                  type: SchemaType.ARRAY,
+                  items: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                      text: { type: SchemaType.STRING },
+                      completed: { type: SchemaType.BOOLEAN }
+                    }
+                  }
+                }
+              },
+              required: ["title", "priority", "dueDate"]
+            }
+          }
+        });
+      } catch (modelError) {
+        console.warn("gemini-2.0-flash not available, using gemini-1.5-pro");
+        model = genAI.getGenerativeModel({
+          model: "gemini-1.5-pro",
+          generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: SchemaType.OBJECT,
+              properties: {
+                title: { type: SchemaType.STRING },
+                description: { type: SchemaType.STRING },
+                priority: { type: SchemaType.STRING, enum: ["Low", "Medium", "High"] },
+                dueDate: { type: SchemaType.STRING, description: "ISO 8601 date string" }, 
+                todoChecklist: {
+                  type: SchemaType.ARRAY,
+                  items: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                      text: { type: SchemaType.STRING },
+                      completed: { type: SchemaType.BOOLEAN }
+                    }
+                  }
+                }
+              },
+              required: ["title", "priority", "dueDate"]
+            }
+          }
+        });
+      }
+
+      const aiPrompt = `
+        You are a smart task manager assistant. Analyze the following request and create a structured task.
+        Current Date/Time: ${new Date().toISOString()}.
+        
+        User Request: "${prompt}"
+        
+        Rules:
+        1. Infer a professional Title from the prompt.
+        2. If no priority is mentioned, default to "Medium".
+        3. If no due date is mentioned, default to 7 days from now in ISO 8601 format (e.g., 2025-12-13T00:00:00Z).
+        4. Create 3-5 relevant sub-tasks for the 'todoChecklist' based on the task description.
+        5. Provide a clear description of what needs to be done.
+        
+        Return ONLY valid JSON, no additional text.
+      `;
+
+      const result = await model.generateContent(aiPrompt);
+      const taskData = JSON.parse(result.response.text());
+
+      // Create the task in the database
+      const newTask = await Task.create({
+        title: taskData.title,
+        description: taskData.description || prompt,
+        priority: taskData.priority || "Medium",
+        dueDate: new Date(taskData.dueDate),
+        todoChecklist: taskData.todoChecklist || [],
+        status: "Pending",
+        assignedTo: [req.user._id],
+        createdBy: req.user._id
+      });
+
+      res.status(201).json(newTask);
+    } catch (aiError) {
+      console.error("Gemini API Error:", aiError.message);
+      // Fallback: Create basic task from prompt
+      return createBasicTaskFromPrompt(req, res, prompt);
+    }
+
+  } catch (error) {
+    console.error("AI Task Creation Error:", error);
+    res.status(500).json({ message: "Failed to create task from AI", error: error.message });
+  }
+};
+
+// Fallback function to create a basic task from the prompt
+const createBasicTaskFromPrompt = async (req, res, prompt) => {
+  try {
+    // Simple parsing of the prompt to extract basic info
+    const lines = prompt.split(/[.,!?]/);
+    const title = lines[0]?.trim() || "New Task";
+    
+    // Default todo checklist based on prompt
+    const defaultTodos = [
+      "Plan and prepare",
+      "Execute",
+      "Review and finalize"
+    ];
+
+    const newTask = await Task.create({
+      title: title.substring(0, 100), // Limit title length
+      description: prompt,
+      priority: "Medium", // Default priority
+      dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
+      todoChecklist: defaultTodos.map(text => ({ text, completed: false })),
+      status: "Pending",
+      assignedTo: [req.user._id],
+      createdBy: req.user._id
+    });
+
+    res.status(201).json(newTask);
+  } catch (fallbackError) {
+    console.error("Fallback Task Creation Error:", fallbackError);
+    res.status(500).json({ 
+      message: "Failed to create task", 
+      error: fallbackError.message 
+    });
+  }
 };
     
 module.exports = {
@@ -540,5 +645,6 @@ module.exports = {
     updateTaskStatus,
     updateTaskChecklist,
     getDashboardData,
-    getUserDashboardData
+    getUserDashboardData,
+    createTaskFromAI // Exporting the new AI controller
 };

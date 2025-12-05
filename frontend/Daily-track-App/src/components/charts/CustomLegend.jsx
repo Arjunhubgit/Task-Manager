@@ -1,16 +1,22 @@
-import React from 'react'
+import React from 'react';
 
 const CustomLegend = ({ payload }) => {
   return (
-    <div className="flex flex-wrap justify-center gap-2 mt-4 space-x-6">
+    <div className="flex flex-wrap justify-center gap-6 mt-6">
       {
         payload.map((entry, index) => (
-          <div key={`legend-${index}`} className="flex items-center space-x-2">
+          <div key={`legend-${index}`} className="flex items-center gap-2 group cursor-default">
+            {/* Colored Dot with Glow */}
             <div
-              className="w-2.5 h-2.5 rounded-full"
-              style={{ backgroundColor: entry.color }}
+              className="w-3 h-3 rounded-full shadow-[0_0_10px_currentColor] transition-transform duration-300 group-hover:scale-125"
+              style={{ 
+                backgroundColor: entry.color, 
+                color: entry.color // Used for shadow currentColor
+              }}
             ></div>
-            <span className="text-xs text-gray-700 font-medium">{entry.value}</span>
+            <span className="text-sm text-gray-400 font-medium group-hover:text-gray-200 transition-colors">
+              {entry.value}
+            </span>
           </div>
         ))
       }

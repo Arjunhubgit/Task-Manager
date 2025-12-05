@@ -10,20 +10,32 @@ const {
   updateTask,
   deleteTask,
   updateTaskStatus,
-  updateTaskChecklist
+  updateTaskChecklist,
+  createTaskFromAI // 💡 Import the new AI controller
 } = require("../controllers/taskControllers");
 
 const router = express.Router();
 
 // Task Management Routes
-router.get("/dashboard-data", protect, getDashboardData);
+
+// 1. Dashboard Data
+router.get("/dashboard-data", protect, adminOnly, getDashboardData); // Added adminOnly for safety based on controller name
 router.get("/user-dashboard-data", protect, getUserDashboardData);
+
+// 2. AI Task Creation (New Route)
+// Must be placed before the dynamic /:id routes to avoid conflict
+router.post("/ai-create", protect, adminOnly, createTaskFromAI); 
+
+// 3. CRUD Operations
 router.get("/", protect, getTasks); // Get all tasks (Admin: all, User: assigned)
+router.post("/", protect, adminOnly, createTask); // Manual task creation (Admin only)
+
 router.get("/:id", protect, getTaskById); // Get task by ID
-router.post("/", protect, adminOnly, createTask); // Create a task (Admin only)
 router.put("/:id", protect, updateTask); // Update task details
 router.delete("/:id", protect, adminOnly, deleteTask); // Delete a task (Admin only)
-router.put("/:id/status", protect, updateTaskStatus); // Update task status
-router.put("/:id/todo", protect, updateTaskChecklist); // Update task checklist
+
+// 4. Status & Checklist Updates
+router.put("/:id/status", protect, updateTaskStatus); 
+router.put("/:id/todo", protect, updateTaskChecklist); 
 
 module.exports = router;

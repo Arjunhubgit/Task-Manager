@@ -2,7 +2,6 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics, isSupported } from "firebase/analytics";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
-import.meta.env;VITE_FIREBASE_API_KEY;
 
 
 // --- TEMPORARY: HARDCODED CONFIG ---

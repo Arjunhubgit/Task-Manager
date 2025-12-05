@@ -1,8 +1,7 @@
 import React, { useContext } from 'react';
 import {
-  BrowserRouter as Router,Route, Routes, Outlet, Navigate
+  BrowserRouter as Router, Route, Routes, Navigate
 } from 'react-router-dom';
-// import PrivateRoute from './Routes/PrivateRoute';
 import Dashboard from './pages/Admin/Dashboard';
 import ManageTask from './pages/Admin/ManageTask';
 import CreateTask from './pages/Admin/CreateTask';
@@ -13,13 +12,8 @@ import ViewTaskDetails from './pages/User/ViewTaskDetails';
 import Login from './pages/Auth/Login';
 import SignUp from './pages/Auth/SignUp';
 import PrivateRoute from './Routes/PrivateRoute';
-import UserProvider, { UserContext } from '../src/context/userContext.jsx'; // Assuming UserProvider is defined in your context folder
+import UserProvider, { UserContext } from '../src/context/userContext.jsx';
 import { Toaster } from 'react-hot-toast';
-// import Scene3D from './components/Scene3D';
-
-
-
-// import Root from './pages/Root';
 
 
 const App = () => {
@@ -28,31 +22,38 @@ const App = () => {
       <div>
         <Router>
           <Routes>
+            {/* Public Routes */}
             <Route path='login' element={<Login />} />
             <Route path='signUp' element={<SignUp />} />
 
-            {/* Admin Routes */}
+            {/* Admin Routes (Guarded by PrivateRoute) */}
             <Route element={<PrivateRoute allowedRoles={['admin']} />}>
               <Route path='admin/dashboard' element={<Dashboard />} />
               <Route path='admin/tasks' element={<ManageTask />} />
               <Route path='admin/create-task' element={<CreateTask />} />
               <Route path='admin/users' element={<ManageUser />} />
             </Route>
-            {/* User Routes */}
+
+            {/* User Routes (Guarded by PrivateRoute) */}
             <Route element={<PrivateRoute allowedRoles={['member']} />}>
               <Route path='user/dashboard' element={<UserDashboard />} />
-              <Route path='user/my-tasks' element={<MyTasks />} />
-              <Route path="user/task-details/:id" element={<ViewTaskDetails />} />
+              {/* IMPROVEMENT: Changed path from 'user/my-tasks' to the cleaner 'user/tasks'. 
+                This now matches the 'See All' link in UserDashboard.jsx.
+              */}
+              <Route path='user/tasks' element={<MyTasks />} /> 
+              
+              {/* IMPROVEMENT: Changed path from 'user/task-details/:id' to the cleaner
+                RESTful path 'user/tasks/:taskId'. This improves consistency.
+              */}
+              <Route path="user/tasks/:taskId" element={<ViewTaskDetails />} /> 
 
             </Route>
-            {/* Fallback Route */}
+
+            {/* Root/Fallback Route */}
             <Route path='/' element={<Root />} />
-            {/* <Route path='*' element={<div>Page Not Found</div>} /> */}
-
+            <Route path='*' element={<NotFound />} /> {/* Added a proper catch-all route */}
           </Routes>
-
         </Router>
-
       </div>
       <Toaster 
         toastOptions={{
@@ -69,20 +70,28 @@ const App = () => {
 
 export default App;
 
+// --- Helper Components ---
+
 const Root = () => {
   const { user, loading } = useContext(UserContext);
 
-  // While checking for a user, show a loading message or return null
   if (loading) {
-    return <div>Loading...</div>; // Or return null;
+    return <div>Loading user context...</div>;
   }
 
-  // If done loading and there's no user, redirect to login
   if (!user) {
     return <Navigate to="/login" replace />;
   }
   
-  // If a user exists, redirect them to their respective dashboard
+  // Navigate to the appropriate dashboard based on role
   return user.role === 'admin' ? 
-    <Navigate to="/admin/dashboard" /> : <Navigate to="/user/dashboard" />;
+    <Navigate to="/admin/dashboard" replace /> : <Navigate to="/user/dashboard" replace />;
 };
+
+const NotFound = () => (
+  <div className="flex items-center justify-center h-screen bg-[#1a1a1a] text-white flex-col">
+    <h1 className="text-4xl font-bold text-[#EA8D23]">404</h1>
+    <p className="text-lg mt-2">Page Not Found</p>
+    <Navigate to="/" />
+  </div>
+);

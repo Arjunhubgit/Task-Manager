@@ -23,6 +23,7 @@ export const API_PATHS = {
     GET_ALL_TASKS: "/api/tasks", // Get all tasks (Admin: all, User: only assign
     GET_TASK_BY_ID: (taskId) => `/api/tasks/${taskId}`, // Get task by ID
     CREATE_TASK: "/api/tasks", // Create a new task (Admin only)
+    CREATE_TASK_FROM_AI: "/api/tasks/ai-create", // Create task from AI prompt (Admin only)
     UPDATE_TASK: (taskId) => `/api/tasks/${taskId}`, // Update task details
     DELETE_TASK: (taskId) => `/api/tasks/${taskId}`, // Delete a task (Admin onl
     UPDATE_TASK_STATUS: (taskId) => `/api/tasks/${taskId}/status`, // Update tas

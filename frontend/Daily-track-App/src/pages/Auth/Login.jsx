@@ -2,9 +2,11 @@ import { useState, useContext, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { validateEmail } from "../../utils/helper.js";
 import { FaEnvelope, FaLock, FaGoogle, FaCheckCircle, FaSignInAlt } from 'react-icons/fa';
+import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import axiosInstance from "../../utils/axiosInstance.js";
 import { API_PATHS } from "../../utils/apiPaths.js";
 import { UserContext } from "../../context/userContext.jsx";
+import imgage from "../../assets/svg/google-color.svg";
 
 // --- 1. ADDED: Firebase Imports ---
 import { signInWithPopup } from "firebase/auth";
@@ -43,6 +45,7 @@ const TypingText = ({ words }) => {
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
 
   const { updateUser } = useContext(UserContext);
@@ -124,9 +127,9 @@ const Login = () => {
             <button 
               type="button"
               onClick={handleGoogleSignIn}
-              className="w-full bg-white hover:bg-gray-100 text-gray-900 font-semibold py-3 px-4 rounded-lg flex items-center justify-center gap-3 transition-transform active:scale-[0.98] mb-6 shadow-lg"
+              className="w-full cursor-pointer bg-white hover:bg-gray-100 text-gray-900 font-semibold py-3 px-4 rounded-lg flex items-center justify-center gap-3 transition-transform active:scale-[0.98] mb-6 shadow-lg"
             >
-              <FaGoogle className="text-xl" />
+              <img src={imgage} alt="Google logo" className="w-5 h-5" />
               <span>Sign in with Google</span>
             </button>
 
@@ -147,8 +150,15 @@ const Login = () => {
               <div className="space-y-1">
                 <label className="text-gray-400 text-xs font-semibold ml-1">Password</label>
                 <div className="relative">
-                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" className="w-full bg-white/5 border border-white/10 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 block w-full p-3 pl-10 outline-none placeholder-gray-600 transition-all hover:bg-white/10" />
+                    <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" className="w-full bg-white/5 border border-white/10 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 block w-full p-3 pl-10 pr-10 outline-none placeholder-gray-600 transition-all hover:bg-white/10" />
                     <FaLock className="absolute left-3 top-3.5 text-gray-500" />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-3.5 text-gray-500 hover:text-gray-300 transition-colors"
+                    >
+                      {showPassword ? <FaEyeSlash /> : <FaEye />}
+                    </button>
                 </div>
               </div>
               {error && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center flex items-center justify-center gap-2"><span className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></span>{error}</div>}

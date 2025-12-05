@@ -4,7 +4,7 @@ import { UserContext } from "../../context/userContext";
 import { SIDE_MENU_DATA, SIDE_MENU_USER_DATA } from "../../utils/data";
 import { LogOut, ChevronLeft, ChevronRight } from 'lucide-react'; 
 
-// --- Sub-Component for Menu Item (Reusable for both views) ---
+// --- Sub-Component for Menu Item ---
 const MenuItem = ({ item, activeMenu, onClick, isCollapsed }) => {
   const isActive = activeMenu === item.label;
 
@@ -13,26 +13,30 @@ const MenuItem = ({ item, activeMenu, onClick, isCollapsed }) => {
       key={item.label}
       aria-current={isActive ? 'page' : undefined}
       title={isCollapsed ? item.label : undefined} 
+      onClick={() => onClick(item.path)}
       className={`
-        w-full flex items-center gap-3 text-sm p-3 rounded-xl transition-all duration-300 ease-in-out font-semibold
-        hover:scale-[1.01] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-blue-500/50
+        relative group w-full flex items-center gap-3 p-3 rounded-lg transition-all duration-300 ease-out font-medium mb-1
         ${isCollapsed ? "justify-center" : "justify-start"}
         ${isActive
-          ? "bg-blue-600 text-white shadow-lg shadow-blue-500/30"
-          : "text-gray-700 bg-white hover:bg-blue-50 hover:text-blue-700 shadow-sm border border-gray-100"
+          ? "bg-orange-500/10 text-[#EA8D23] border border-orange-500/20 shadow-[0_0_15px_rgba(234,141,35,0.1)]"
+          : "text-gray-400 border border-transparent hover:bg-white/5 hover:text-gray-100 hover:border-white/5"
         }
       `}
-      onClick={() => onClick(item.path)}
     >
-      <div
-        className={`
-          p-2 rounded-lg transition-all duration-300 flex-shrink-0
-          ${isActive ? "bg-white/20" : "bg-gray-50 group-hover:bg-blue-100/70"}
-        `}
-      >
-        <item.icon className={`w-5 h-5 transition-colors duration-300 ${isActive ? "text-white" : "text-blue-500 group-hover:text-blue-600"}`} />
+      {/* Icon */}
+      <div className={`transition-transform duration-300 ${isActive ? "" : "group-hover:scale-110"}`}>
+        <item.icon className={`w-5 h-5 ${isActive ? "text-[#EA8D23]" : "text-gray-400 group-hover:text-gray-200"}`} />
       </div>
-      {!isCollapsed && <span className="tracking-wide">{item.label}</span>}
+
+      {/* Label */}
+      {!isCollapsed && (
+        <span className="tracking-wide text-sm">{item.label}</span>
+      )}
+      
+      {/* Active Indicator (Glow Dot) */}
+      {isActive && !isCollapsed && (
+        <div className="absolute right-3 w-1.5 h-1.5 rounded-full bg-[#EA8D23] shadow-[0_0_10px_#EA8D23]" />
+      )}
     </button>
   );
 };
@@ -61,39 +65,58 @@ const SideMenu = ({ activeMenu, isMobile, onMobileClose }) => {
       return;
     }
     navigate(route);
-    // Removed mobileOpen logic since this component no longer manages mobile state
   }, [handleLogout, navigate]); 
   
   // Dynamic Profile Image
   const profileImage = user?.profileImageUrl ||
     "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png";
 
-  // Unified Menu Body
+  // --- Unified Menu Body ---
   const menuBody = (
     <nav className={`
-        bg-white border-r border-gray-200 shadow-2xl/10 h-full p-4 flex flex-col transition-all duration-300 ease-in-out
-        ${isCollapsed ? "w-20 items-center" : "w-64"}
+        h-full flex flex-col transition-all duration-300 ease-in-out relative overflow-hidden
+        bg-[#050505] border-r border-white/10
+        ${isCollapsed ? "w-20 items-center px-2" : "w-64 px-4"}
     `}>
+      {/* Ambient Background Glow (Matching Login Page) */}
+      <div className="absolute top-0 left-0 w-full h-32 bg-orange-600/5 blur-[50px] pointer-events-none" />
+
       {/* Profile Section */}
-      <header className={`flex items-center gap-3 border-b border-gray-200 pb-4 mb-6 ${isCollapsed ? 'justify-center flex-col' : ''}`}>
-        {/* ... Profile structure remains the same ... */}
-        <div className="relative w-12 h-12 rounded-full overflow-hidden shadow-md border-2 border-blue-400">
-          <img src={profileImage} alt={`${user?.name || "User"}'s profile`} className="w-full h-full object-cover" />
-          {user?.role === "admin" && (<div title="Admin" className="absolute bottom-0 right-0 w-3 h-3 bg-red-500 rounded-full border border-white"></div>)}
+      <header className={`
+        relative z-10 flex items-center gap-3 py-6 mb-4 border-b border-white/10 transition-all duration-300
+        ${isCollapsed ? 'justify-center flex-col pb-4' : ''}
+      `}>
+        <div className={`
+          relative rounded-full p-[2px] bg-gradient-to-tr from-orange-500/50 to-purple-900/50
+          ${isCollapsed ? "w-10 h-10" : "w-12 h-12"}
+        `}>
+          <img 
+            src={profileImage} 
+            alt="Profile" 
+            className="w-full h-full rounded-full object-cover border-2 border-[#050505]" 
+          />
+          {user?.role === "admin" && (
+            <div title="Admin" className="absolute bottom-0 right-0 w-3 h-3 bg-[#EA8D23] rounded-full border-2 border-[#050505] shadow-[0_0_8px_#EA8D23]"></div>
+          )}
         </div>
+        
         {!isCollapsed && (
           <div className="flex flex-col overflow-hidden">
-            <div className="flex items-center gap-2">
-              <h5 className="font-extrabold text-lg text-gray-900 truncate">{user?.name || "User"}</h5>
-              {user?.role === "admin" && (<span className="bg-blue-100 text-blue-800 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase whitespace-nowrap">Admin</span>)}
+            <h5 className="font-bold text-gray-200 truncate text-sm">{user?.name || "User"}</h5>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-xs text-gray-500 font-medium truncate max-w-[120px]">{user?.email || "Guest"}</span>
+              {user?.role === "admin" && (
+                <span className="bg-orange-500/10 text-[#EA8D23] border border-orange-500/20 text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                  Admin
+                </span>
+              )}
             </div>
-            <p className="text-sm text-gray-500 font-medium truncate">{user?.email || "Guest"}</p>
           </div>
         )}
       </header>
 
       {/* Menu Items */}
-      <ul className="flex flex-col gap-2 flex-1 overflow-y-auto pr-1">
+      <ul className="relative z-10 flex flex-col gap-1 flex-1 overflow-y-auto pr-1 custom-scrollbar">
         {sideMenuData.map((item) => (
           <li key={item.label}>
             <MenuItem item={item} activeMenu={activeMenu} onClick={handleClick} isCollapsed={isCollapsed} />
@@ -102,14 +125,18 @@ const SideMenu = ({ activeMenu, isMobile, onMobileClose }) => {
       </ul>
 
       {/* Footer/Logout */}
-      <footer className="mt-4 pt-4 border-t border-gray-200">
+      <footer className="relative z-10 mt-auto py-6 border-t border-white/10">
         <button
           onClick={handleLogout}
           title={isCollapsed ? "Logout" : undefined}
-          className={`w-full flex items-center gap-3 text-sm p-3 rounded-xl transition-all duration-300 ease-in-out font-semibold text-red-600 bg-white hover:bg-red-50 hover:text-red-700 shadow-sm border border-red-100 ${isCollapsed ? "justify-center" : "justify-start"}`}
+          className={`
+            group w-full flex items-center gap-3 text-sm p-3 rounded-lg transition-all duration-300 ease-in-out font-medium
+            text-gray-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/10
+            ${isCollapsed ? "justify-center" : "justify-start"}
+          `}
         >
-          <div className="p-2 rounded-lg bg-red-100/70 flex-shrink-0">
-            <LogOut className="w-5 h-5 text-red-500" />
+          <div className="transition-transform group-hover:scale-110">
+            <LogOut className="w-5 h-5 group-hover:text-red-400" />
           </div>
           {!isCollapsed && <span className="tracking-wide">Logout</span>}
         </button>
@@ -117,38 +144,35 @@ const SideMenu = ({ activeMenu, isMobile, onMobileClose }) => {
     </nav>
   );
 
-  // Modified return to handle both mobile and desktop cases
   return (
     <>
+      {/* Desktop Wrapper */}
       {!isMobile && (
         <>
           <div className={`
             hidden lg:flex fixed top-[4.5rem] z-50 transition-all duration-300 ease-in-out
-            ${isCollapsed ? "left-[90px]" : "left-[264px]"}
+            ${isCollapsed ? "left-[65px]" : "left-[240px]"}
           `}>
             <button
               onClick={() => setIsCollapsed(s => !s)}
-              aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className="p-1.5 bg-white border border-gray-200 rounded-full text-gray-600 shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="p-1 bg-[#050505] border border-white/20 rounded-full text-gray-400 hover:text-[#EA8D23] hover:border-[#EA8D23] shadow-lg transition-all duration-300"
             >
-              {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+              {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
             </button>
           </div>
 
           <div className={`
-            hidden lg:block h-[calc(100vh)] transition-all duration-300 ease-in-out flex-shrink-0
+            hidden lg:block h-screen sticky top-0 transition-all duration-300 ease-in-out flex-shrink-0
             ${isCollapsed ? 'w-20' : 'w-64'}
           `}>
-            <div className="h-full sticky top-0">
-              {menuBody}
-            </div>
+            {menuBody}
           </div>
         </>
       )}
       
+      {/* Mobile Wrapper */}
       {isMobile && (
-        <div className="w-64 h-full bg-white shadow-xl">
+        <div className="w-64 h-full bg-[#050505] shadow-2xl shadow-black/50 border-r border-white/10">
           {menuBody}
         </div>
       )}

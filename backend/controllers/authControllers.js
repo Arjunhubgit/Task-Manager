@@ -101,15 +101,13 @@ const loginUser = async (req, res) => {
 //  */
 const googleLogin = async (req, res) => {
     try {
-        // Data coming from Frontend (Firebase)
-        const { email, name, googlePhotoUrl } = req.body;
+        // 1. Extract adminInviteToken from the request
+        const { email, name, googlePhotoUrl, adminInviteToken } = req.body;
 
-        // Check if user exists
         let user = await User.findOne({ email });
 
         if (user) {
-            // SCENARIO A: User exists. Log them in.
-            // (Even if they originally signed up with password, we allow Google login if emails match)
+            // User exists - Log them in
             res.json({
                 _id: user._id,
                 name: user.name,
@@ -119,20 +117,26 @@ const googleLogin = async (req, res) => {
                 token: generateToken(user._id)
             });
         } else {
-            // SCENARIO B: User does not exist. Create them.
-            // Note: We do NOT set a password here.
+            // User DOES NOT exist - Create new user
+
+            // 2. Check for Admin Token Logic
+            let role = "member";
+            if (adminInviteToken && adminInviteToken == process.env.ADMIN_INVITE_TOKEN) {
+                role = "admin";
+            }
+
             user = await User.create({
                 name: name,
                 email: email,
                 profileImageUrl: googlePhotoUrl,
-                // role defaults to "member" from Schema
+                role: role // <--- Apply the determined role
             });
 
             res.status(201).json({
                 _id: user._id,
                 name: user.name,
                 email: user.email,
-                role: user.role,
+                role: user.role, // This will now be 'admin' if token matched
                 profileImageUrl: user.profileImageUrl,
                 token: generateToken(user._id)
             });

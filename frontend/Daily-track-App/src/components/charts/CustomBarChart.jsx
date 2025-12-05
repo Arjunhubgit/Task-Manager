@@ -1,5 +1,4 @@
-import React from 'react'
-
+import React from 'react';
 import {
   BarChart,
   Bar,
@@ -7,75 +6,89 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   Cell
 } from "recharts";
 
 const CustomBarChart = ({ data }) => {
-    // Function to alternate colors based on priority
+  // --- Cyberpunk Neon Palette ---
   const getBarColor = (entry) => {
     switch (entry?.priority) {
       case 'Low':
-        return '#00BC7D';
+        return '#06b6d4'; // Cyan-500 (Cool/Safe)
       case 'Medium':
-        return '#FE9900';
+        return '#f97316'; // Orange-500 (Brand Color)
       case 'High':
-        return '#FF1F57';
+        return '#f43f5e'; // Rose-500 (Critical/Alert)
       default:
-        return '#00BC7D';
+        return '#64748b';
     }
   };
-  const CustomTooltip = ({ active, payload }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-white shadow-md rounded-lg p-2 border border-gray-300">
-        <p className="text-xs font-semibold text-purple-800 mb-1">
-          {payload[0].payload.priority}
-        </p>
-        <p className="text-sm text-gray-600">
-          Count: {" "}
-          <span className="text-sm font-medium text-gray-900">
-            {payload[0].payload.count}
-          </span>
-        </p>
-      </div>
-    );
-  }
-  return null;
-};
+
+  // --- Internal Custom Tooltip (Specific to Bar Data Structure) ---
+  const CustomBarTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      const priority = payload[0].payload.priority;
+      const color = getBarColor({ priority });
+      
+      return (
+        <div className="bg-black/90 backdrop-blur-xl p-3 rounded-lg border border-white/10 shadow-[0_0_20px_rgba(0,0,0,0.5)]">
+          <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: color }}>
+            {priority} Priority
+          </p>
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-bold text-white">
+              {payload[0].payload.count}
+            </span>
+            <span className="text-xs text-gray-500">tickets</span>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
-    <div className="bg:white mt-6">
+    <div className="w-full mt-4">
       <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={data}>
-          <CartesianGrid stroke="none" />
+        <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          {/* Subtle Grid */}
+          <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
+          
           <XAxis
             dataKey="priority"
-            tick={{ fontSize: 12, fill: "#555" }}
+            tick={{ fontSize: 12, fill: "#9ca3af" }} // Gray-400
             stroke="none"
+            dy={10}
           />
           <YAxis
-            tick={{ fontSize: 12, fill: "#555" }}
+            tick={{ fontSize: 12, fill: "#9ca3af" }} // Gray-400
             stroke="none"
           />
+          
           <Tooltip
-            content={<CustomTooltip />}
-            cursor={{ fill: "transparent" }}
+            content={<CustomBarTooltip />}
+            cursor={{ fill: "rgba(255,255,255,0.05)" }} // Subtle highlight on hover
           />
+          
           <Bar
             dataKey="count"
             nameKey="priority"
-            fill='#8884d8'
-            radius={[5, 5, 0, 0]}
-            activeDot = {{ r: 8, fill:"yellow" }}
-            activeStyle = {{ fill: 'green' }}
-            >
+            radius={[6, 6, 0, 0]} // Rounded tops
+            barSize={40}
+            animationDuration={1500}
+          >
             {
               data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={getBarColor(entry)} />
+                <Cell 
+                  key={`cell-${index}`} 
+                  fill={getBarColor(entry)} 
+                  // Add a subtle stroke/glow to the bars
+                  strokeWidth={0}
+                />
               ))
             }
-            </Bar>
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
     </div>
