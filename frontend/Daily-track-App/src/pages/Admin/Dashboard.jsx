@@ -9,7 +9,7 @@ import { LuArrowRight } from "react-icons/lu";
 import TaskListTable from "../../components/TaskListTable";
 import CustomPieChart from "../../components/charts/CustomPieChart";
 import CustomBarChart from "../../components/charts/CustomBarChart";
-import DashboardStats from "../../components/cards/DashboardStats"; // Ensure this path matches where you put the new component
+import DashboardStats from "../../components/cards/DashboardStats"; 
 
 const Dashboard = () => {
   useUserAuth();
@@ -62,7 +62,6 @@ const Dashboard = () => {
     getDashboardData();
   }, []);
 
-  // Stats Data Mapper for the new component
   const statsForHeader = {
     total: dashboardData?.charts?.taskDistribution?.All || 0,
     pending: dashboardData?.charts?.taskDistribution?.Pending || 0,
@@ -73,49 +72,67 @@ const Dashboard = () => {
   return (
     <DashboardLayout activeMenu="Dashboard">
       
-      {/* 1. New Glass Hero Section (Replaces the old text header) */}
-      <DashboardStats user={user} stats={statsForHeader} />
+      {/* --- FIX: CSS Injection to Hide Scrollbar --- 
+         This hides the scrollbar visual from the parent container 
+         without needing to edit DashboardLayout.jsx 
+      */}
+      <style>{`
+        /* Hide scrollbar for Chrome, Safari and Opera */
+        ::-webkit-scrollbar {
+          display: none;
+        }
+        /* Hide scrollbar for IE, Edge and Firefox */
+        html, body, div {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
+        }
+      `}</style>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      {/* Main Content Wrapper */}
+      <div className="w-full flex flex-col gap-6 pb-6"> 
         
-        {/* Pie Chart Card */}
-        <div className="bg-[#1a1a1a]/40 backdrop-blur-xl border border-white/5 rounded-2xl p-6 shadow-lg">
-          <div className="flex items-center justify-between mb-4 border-b border-white/5 pb-2">
-            <h5 className="text-lg font-semibold text-white">Task Distribution</h5>
+        {/* 1. Dashboard Stats Header */}
+        <DashboardStats user={user} stats={statsForHeader} />
+
+        {/* 2. Charts Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Pie Chart Card */}
+          <div className="bg-[#1a1a1a]/40 backdrop-blur-xl border border-white/5 rounded-2xl p-6 shadow-lg">
+            <div className="flex items-center justify-between mb-4 border-b border-white/5 pb-2">
+              <h5 className="text-lg font-semibold text-white">Task Distribution</h5>
+            </div>
+            <div className="flex justify-center h-[300px]"> 
+               <CustomPieChart data={pieChartData} colors={COLORS} />
+            </div>
           </div>
-          <div className="flex justify-center">
-             <CustomPieChart data={pieChartData} colors={COLORS} />
+
+          {/* Bar Chart Card */}
+          <div className="bg-[#1a1a1a]/40 backdrop-blur-xl border border-white/5 rounded-2xl p-6 shadow-lg">
+            <div className="flex items-center justify-between mb-4 border-b border-white/5 pb-2">
+              <h5 className="text-lg font-semibold text-white">Task Priority Level</h5>
+            </div>
+            <div className="flex justify-center h-[300px]"> 
+              <CustomBarChart data={barChartData} />
+            </div>
           </div>
         </div>
 
-        {/* Bar Chart Card */}
+        {/* 3. Recent Tasks Table Section */}
         <div className="bg-[#1a1a1a]/40 backdrop-blur-xl border border-white/5 rounded-2xl p-6 shadow-lg">
-          <div className="flex items-center justify-between mb-4 border-b border-white/5 pb-2">
-            <h5 className="text-lg font-semibold text-white">Task Priority Level</h5>
+          <div className="flex items-center justify-between mb-6">
+            <h5 className="text-xl font-bold text-white tracking-tight">Recent Tasks</h5>
+            <button 
+              className="flex items-center gap-2 text-sm text-[#EA8D23] hover:text-white transition-colors" 
+              onClick={onSeeMore}
+            >
+              See All <LuArrowRight className="text-lg" />
+            </button>
           </div>
-          <div className="flex justify-center">
-            <CustomBarChart data={barChartData} />
+          <div className="overflow-x-auto">
+              <TaskListTable tableData={dashboardData?.recentTasks || []} />
           </div>
         </div>
-      </div>
 
-      {/* Recent Tasks Table Section */}
-      <div className="bg-[#1a1a1a]/40 backdrop-blur-xl border border-white/5 rounded-2xl p-6 shadow-lg">
-        <div className="flex items-center justify-between mb-6">
-          <h5 className="text-xl font-bold text-white tracking-tight">Recent Tasks</h5>
-          <button 
-            className="flex items-center gap-2 text-sm text-[#EA8D23] hover:text-white transition-colors" 
-            onClick={onSeeMore}
-          >
-            See All <LuArrowRight className="text-lg" />
-          </button>
-        </div>
-        {/* Note: Ensure TaskListTable is also updated to use transparent/dark backgrounds 
-           instead of white. If not, wrap it in a div that handles text colors.
-        */}
-        <div className="overflow-x-auto">
-            <TaskListTable tableData={dashboardData?.recentTasks || []} />
-        </div>
       </div>
     </DashboardLayout>
   );

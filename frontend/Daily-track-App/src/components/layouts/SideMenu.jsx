@@ -2,7 +2,7 @@ import React, { useContext, useMemo, useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { UserContext } from "../../context/userContext";
 import { SIDE_MENU_DATA, SIDE_MENU_USER_DATA } from "../../utils/data";
-import { LogOut, ChevronLeft, ChevronRight } from 'lucide-react'; 
+import { LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // --- Sub-Component for Menu Item ---
 const MenuItem = ({ item, activeMenu, onClick, isCollapsed }) => {
@@ -12,7 +12,7 @@ const MenuItem = ({ item, activeMenu, onClick, isCollapsed }) => {
     <button
       key={item.label}
       aria-current={isActive ? 'page' : undefined}
-      title={isCollapsed ? item.label : undefined} 
+      title={isCollapsed ? item.label : undefined}
       onClick={() => onClick(item.path)}
       className={`
         relative group w-full flex items-center gap-3 p-3 rounded-lg transition-all duration-300 ease-out font-medium mb-1
@@ -32,7 +32,7 @@ const MenuItem = ({ item, activeMenu, onClick, isCollapsed }) => {
       {!isCollapsed && (
         <span className="tracking-wide text-sm">{item.label}</span>
       )}
-      
+
       {/* Active Indicator (Glow Dot) */}
       {isActive && !isCollapsed && (
         <div className="absolute right-3 w-1.5 h-1.5 rounded-full bg-[#EA8D23] shadow-[0_0_10px_#EA8D23]" />
@@ -47,7 +47,7 @@ const SideMenu = ({ activeMenu, isMobile, onMobileClose }) => {
   const navigate = useNavigate();
 
   // Desktop state for collapse
-  const [isCollapsed, setIsCollapsed] = useState(false); 
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const sideMenuData = useMemo(() => {
     return user?.role === "admin" ? SIDE_MENU_DATA : SIDE_MENU_USER_DATA;
@@ -65,8 +65,8 @@ const SideMenu = ({ activeMenu, isMobile, onMobileClose }) => {
       return;
     }
     navigate(route);
-  }, [handleLogout, navigate]); 
-  
+  }, [handleLogout, navigate]);
+
   // Dynamic Profile Image
   const profileImage = user?.profileImageUrl ||
     "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png";
@@ -90,16 +90,16 @@ const SideMenu = ({ activeMenu, isMobile, onMobileClose }) => {
           relative rounded-full p-[2px] bg-gradient-to-tr from-orange-500/50 to-purple-900/50
           ${isCollapsed ? "w-10 h-10" : "w-12 h-12"}
         `}>
-          <img 
-            src={profileImage} 
-            alt="Profile" 
-            className="w-full h-full rounded-full object-cover border-2 border-[#050505]" 
+          <img
+            src={profileImage}
+            alt="Profile"
+            className="w-full h-full rounded-full object-cover border-2 border-[#050505]"
           />
           {user?.role === "admin" && (
             <div title="Admin" className="absolute bottom-0 right-0 w-3 h-3 bg-[#EA8D23] rounded-full border-2 border-[#050505] shadow-[0_0_8px_#EA8D23]"></div>
           )}
         </div>
-        
+
         {!isCollapsed && (
           <div className="flex flex-col overflow-hidden">
             <h5 className="font-bold text-gray-200 truncate text-sm">{user?.name || "User"}</h5>
@@ -125,15 +125,15 @@ const SideMenu = ({ activeMenu, isMobile, onMobileClose }) => {
       </ul>
 
       {/* Footer/Logout */}
-      <footer className="relative z-10 mt-auto py-6 border-t border-white/10">
+      <footer className="z-10 mt-auto py-6 border-t border-white/10 mb-2">
         <button
           onClick={handleLogout}
           title={isCollapsed ? "Logout" : undefined}
           className={`
-            group w-full flex items-center gap-3 text-sm p-3 rounded-lg transition-all duration-300 ease-in-out font-medium
-            text-gray-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/10
-            ${isCollapsed ? "justify-center" : "justify-start"}
-          `}
+      group w-full flex items-center gap-3 text-sm p-3 rounded-lg transition-all duration-300 ease-in-out font-medium
+      text-gray-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/10
+      ${isCollapsed ? "justify-center" : "justify-start"}
+    `}
         >
           <div className="transition-transform group-hover:scale-110">
             <LogOut className="w-5 h-5 group-hover:text-red-400" />
@@ -169,7 +169,7 @@ const SideMenu = ({ activeMenu, isMobile, onMobileClose }) => {
           </div>
         </>
       )}
-      
+
       {/* Mobile Wrapper */}
       {isMobile && (
         <div className="w-64 h-full bg-[#050505] shadow-2xl shadow-black/50 border-r border-white/10">

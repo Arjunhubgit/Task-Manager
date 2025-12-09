@@ -7,6 +7,7 @@ import axiosInstance from "../../utils/axiosInstance.js";
 import { API_PATHS } from "../../utils/apiPaths.js";
 import { UserContext } from "../../context/userContext.jsx";
 import imgage from "../../assets/svg/google-color.svg";
+import logo from "../../assets/images/logo1.png";
 
 // --- 1. ADDED: Firebase Imports ---
 import { signInWithPopup } from "firebase/auth";
@@ -114,7 +115,7 @@ const Login = () => {
         {/* Left Side: Login Form */}
         <div className="flex justify-center lg:justify-start">
           <div className="w-full max-w-[450px] bg-black/40 backdrop-blur-xl rounded-2xl border border-white/10 p-8 shadow-2xl relative">
-            
+            <img src={logo} alt="DailyTrack Logo" className="w-120 mb-4" />
             <div className="flex flex-col items-center mb-8">
               <div className="mb-4">
                 <FaSignInAlt className="text-orange-500 text-3xl drop-shadow-[0_0_15px_rgba(249,115,22,0.5)]" />
@@ -130,7 +131,7 @@ const Login = () => {
               className="w-full cursor-pointer bg-white hover:bg-gray-100 text-gray-900 font-semibold py-3 px-4 rounded-lg flex items-center justify-center gap-3 transition-transform active:scale-[0.98] mb-6 shadow-lg"
             >
               <img src={imgage} alt="Google logo" className="w-5 h-5" />
-              <span>Sign in with Google</span>
+              <span>Sign-In with Google</span>
             </button>
 
             <div className="flex items-center gap-4 mb-6">

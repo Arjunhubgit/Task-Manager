@@ -7,6 +7,8 @@ import axiosInstance from '../../utils/axiosInstance';
 import { API_PATHS } from '../../utils/apiPaths';
 import { UserContext } from '../../context/userContext';
 import uploadImage from '../../utils/uploadimage';
+import imgage from "../../assets/svg/google-color.svg";
+import logo from "../../assets/images/logo1.png";
 
 // --- 1. ADDED: Firebase Imports ---
 import { signInWithPopup } from "firebase/auth";
@@ -135,6 +137,7 @@ const SignUp = () => {
         {/* Left Side: Animated Text */}
         <div className="hidden lg:flex flex-col justify-center space-y-8 pl-8">
             <div className="space-y-4">
+          
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 w-fit">
                     <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span>
                     <span className="text-orange-500 text-xs font-bold tracking-wider uppercase">AI-Powered Task Management</span>
@@ -163,8 +166,10 @@ const SignUp = () => {
 
         {/* Right Side: Signup Form */}
         <div className="flex justify-center lg:justify-end">
-            <div className="w-full max-w-[450px] bg-black/40 backdrop-blur-xl rounded-2xl border border-white/10 p-8 shadow-2xl relative">
-                
+           
+            <div className="w-full scale-100 max-w-[450px] bg-black/40 backdrop-blur-xl rounded-2xl border border-white/10 p-8 shadow-2xl relative">
+                {/* Logo */}
+                <img src={logo} alt="DailyTrack Logo" className="w-80 relative left-9 mb-4" />
                 <div className="flex flex-col items-center mb-8">
                 <div className="mb-4">
                     <FaRocket className="text-orange-500 text-3xl transform -rotate-45 drop-shadow-[0_0_15px_rgba(249,115,22,0.5)]" />
@@ -179,7 +184,7 @@ const SignUp = () => {
                   onClick={handleGoogleSignIn} 
                   className="w-full bg-white hover:bg-gray-100 text-gray-900 font-semibold py-3 px-4 rounded-lg flex items-center justify-center gap-3 transition-transform active:scale-[0.98] mb-6 shadow-lg"
                 >
-                  <FaGoogle className="text-xl" />
+                  <img src={imgage} alt="Google logo" className="w-5 h-5" />
                   <span>Sign up with Google</span>
                 </button>
 
@@ -199,12 +204,12 @@ const SignUp = () => {
                    </div>
                    <div className="space-y-1">
                        <label className="text-gray-400 text-xs font-semibold ml-1">Email Address</label>
-                       <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="w-full bg-white/5 border border-white/10 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 block w-full p-3 outline-none placeholder-gray-600 transition-all hover:bg-white/10" />
+                       <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="w-full bg-white/5 border border-white/10 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 block p-3 outline-none placeholder-gray-600 transition-all hover:bg-white/10" />
                    </div>
                    <div className="space-y-1">
                        <label className="text-gray-400 text-xs font-semibold ml-1">Password</label>
                        <div className="relative">
-                           <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Create a strong password" className="w-full bg-white/5 border border-white/10 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 block w-full p-3 pl-3 pr-10 outline-none placeholder-gray-600 transition-all hover:bg-white/10" />
+                           <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Create a strong password" className="bg-white/5 border border-white/10 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 block w-full p-3 pl-3 pr-10 outline-none placeholder-gray-600 transition-all hover:bg-white/10" />
                            <button
                              type="button"
                              onClick={() => setShowPassword(!showPassword)}

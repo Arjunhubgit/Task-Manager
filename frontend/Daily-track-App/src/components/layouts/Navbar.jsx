@@ -1,16 +1,16 @@
 import React, { useState, useCallback } from 'react';
 import { Menu, X, LayoutDashboard, Settings, Users, CheckSquare } from "lucide-react";
-import Logo_img from '../../assets/images/logo1.png';
+import Logo_img2 from '../../assets/images/logo2.png';
 
 // --- Sub-Component for Logo and Brand ---
 const Brand = () => (
     <div className="flex items-center gap-3 flex-shrink-0 group cursor-pointer">
         <div className="relative">
             <div className="absolute inset-0 bg-orange-500 blur-lg opacity-20 group-hover:opacity-40 transition-opacity duration-300"></div>
-            <img src={Logo_img} alt="Task Manager Logo" className="relative w-9 h-9 rounded-lg border border-white/10" />
+            <img src={Logo_img2} alt="Task Manager Logo" className="relative w-9 h-9 rounded-lg border border-white/10" />
         </div>
         <h2 className="text-xl font-extrabold text-white tracking-tight hidden sm:block">
-            Task<span className="text-[#EA8D23]">Manager</span>
+            CHRONO<span className="text-[#EA8D23]">FLOW</span>
         </h2>
     </div>
 );

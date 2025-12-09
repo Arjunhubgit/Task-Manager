@@ -407,10 +407,12 @@ const getDashboardData = async (req, res) => {
             return acc;
         }, {});
 
+        // --- FIX IS HERE ---
         const recentTasks = await Task.find()
             .sort({ createdAt: -1 })
             .limit(10)
-            .select("title description status priority dueDate assignedTo createdAt");
+            .select("title description status priority dueDate assignedTo createdAt")
+            .populate("assignedTo", "name email profileImageUrl"); // <--- ADD THIS LINE
 
         res.status(200).json({
             statistics: { totalTasks, pendingTasks, completedTasks, overdueTasks },
