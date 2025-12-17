@@ -6,12 +6,21 @@ import { API_PATHS } from '../../utils/apiPaths';
 import { LuFileSpreadsheet } from 'react-icons/lu';
 import TaskStatusTabs from '../../components/TaskStatusTabs';
 import TaskCard from '../../components/cards/TaskCards';
-
+import toast from 'react-hot-toast';
+// --- NEW IMPORT ---
+import UserTaskProfileModal from '../../components/UserTaskProfileModal'; 
 
 const ManageTasks = () => {
   const [allTasks, setAllTasks] = useState([]);
   const [tabs, setTabs] = useState([]);
   const [filterStatus, setFilterStatus] = useState("All");
+
+  // --- NEW STATE FOR USER PROFILE MODAL ---
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [userTasks, setUserTasks] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [loadingUserTasks, setLoadingUserTasks] = useState(false);
+  // ----------------------------------------
 
   const navigate = useNavigate();
 
@@ -44,7 +53,7 @@ const ManageTasks = () => {
 
       setTabs(statusArray);
     } catch (error) {
-      console.error("Error fetching users:", error);
+      console.error("Error fetching tasks:", error);
     }
   };
 
@@ -52,35 +61,69 @@ const ManageTasks = () => {
     navigate('/admin/create-task', { state: { taskId: taskData._id } });
   };
 
-  // download task report
-const handleDownloadReport = async () => {
-  try {
-    const response = await axiosInstance.get(API_PATHS.REPORTS.EXPORT_TASKS, {
-      responseType: "blob",
-    });
+  // --- NEW FUNCTION: HANDLE AVATAR CLICK ---
+  const handleAvatarClick = async (user) => {
+    if (!user) return;
 
-    // Create a URL for the blob
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", "task_details.xlsx");
-    document.body.appendChild(link);
-    link.click();
-    link.parentNode.removeChild(link);
-    window.URL.revokeObjectURL(url);
-  } catch (error) {
-    console.error("Error downloading expense details:", error);
-    toast.error("Failed to download expense details. Please try again.");
-  }
-};
+    setSelectedUser(user);
+    setIsModalOpen(true);
+    setLoadingUserTasks(true);
+
+    try {
+      // Fetch tasks specifically assigned to this user
+      // Note: This relies on the backend update we did in Step 1
+      const response = await axiosInstance.get(API_PATHS.TASKS.GET_ALL_TASKS, {
+        params: { assignedTo: user._id } 
+      });
+      setUserTasks(response.data?.tasks || []);
+    } catch (error) {
+      console.error("Error fetching user tasks", error);
+      toast.error("Could not load user history");
+      setUserTasks([]);
+    } finally {
+      setLoadingUserTasks(false);
+    }
+  };
+  // -----------------------------------------
+
+  // download task report
+  const handleDownloadReport = async () => {
+    try {
+      const response = await axiosInstance.get(API_PATHS.REPORTS.EXPORT_TASKS, {
+        responseType: "blob",
+      });
+
+      // Create a URL for the blob
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", "task_details.xlsx");
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error downloading expense details:", error);
+      toast.error("Failed to download expense details. Please try again.");
+    }
+  };
 
   useEffect(() => {
-    getAllTasks(filterStatus);
-    return () => { };
+    getAllTasks();
   }, [filterStatus]);
 
   return (
     <DashboardLayout activeMenu="Manage Tasks">
+      
+      {/* --- RENDER THE NEW MODAL --- */}
+      <UserTaskProfileModal 
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        user={selectedUser}
+        tasks={userTasks}
+        loading={loadingUserTasks}
+      />
+
       <div className="my-5">
         <div className="flex flex-col lg:flex-row lg:items-center md:justify-between">
           <div className="flex items-center justify-between gap-3">
@@ -112,8 +155,9 @@ const handleDownloadReport = async () => {
             )}
           </div>
         </div>
+        
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-          {allTasks?.map((item, index) => (
+          {allTasks?.map((item) => (
             <TaskCard
               key={item._id}
               title={item.title}
@@ -123,13 +167,18 @@ const handleDownloadReport = async () => {
               progress={item.progress}
               createdAt={item.createdAt}
               dueDate={item.dueDate}
-              assignedTo={item.assignedTo?.map((item) => item.profileImageUrl)}
+              
+              // CRITICAL CHANGE: Pass the full array, not just images
+              assignedTo={item.assignedTo} 
+              
               attachmentCount={item.attachments?.length || 0}
               completedTodoCount={item.completedTodoCount || 0}
               todoChecklist={item.todoChecklist || []}
-              onClick={() => {
-                handleClick(item);
-              }}
+              
+              onClick={() => handleClick(item)}
+              
+              // PASS THE NEW HANDLER
+              onAvatarClick={handleAvatarClick} 
             />
           ))}
         </div>

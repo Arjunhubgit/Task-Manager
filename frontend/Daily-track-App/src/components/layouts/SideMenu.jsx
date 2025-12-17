@@ -157,7 +157,7 @@ const SideMenu = ({ activeMenu, isMobile, onMobileClose }) => {
               onClick={() => setIsCollapsed(s => !s)}
               className="p-1 bg-[#050505] border border-white/20 rounded-full text-gray-400 hover:text-[#EA8D23] hover:border-[#EA8D23] shadow-lg transition-all duration-300"
             >
-              {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+              {isCollapsed ? <ChevronRight className="w-4 h-4 z-50" /> : <ChevronLeft className="w-4 h-4 z-50" />}
             </button>
           </div>
 

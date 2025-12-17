@@ -151,30 +151,31 @@ const getAIPriorityAndSummary = async (taskDescription, userRole) => {
 // @access  Private
 const getTasks = async (req, res) => {
     try {
-        // 1. Extract Query Parameters (Status filter + Pagination)
-        const { status, page = 1, limit = 10 } = req.query;
-        const skip = (page - 1) * limit;
-
+        const { status, assignedTo } = req.query; // <--- MODIFICATION 1: Extract assignedTo
+        
         let filter = {};
         if (status) {
             filter.status = status;
         }
-
-        // 2. Role-based Access Control logic
-        // If not admin, restrict filter to the current user's ID
-        if (req.user.role !== "admin") {
-            filter.assignedTo = req.user._id;
+        // <--- MODIFICATION 2: Add assignedTo to filter if it exists
+        if (assignedTo) {
+            filter.assignedTo = assignedTo;
         }
 
-        // 3. Fetch Paginated Tasks
-        // We add .sort(), .skip(), and .limit() here
-        let tasks = await Task.find(filter)
-            .populate("assignedTo", "name email profileImageUrl")
-            .sort({ createdAt: -1 }) // Sort by newest first (Professional standard)
-            .skip(parseInt(skip))
-            .limit(parseInt(limit));
+        let tasks;
+        if (req.user.role === "admin") {
+            tasks = await Task.find(filter).populate(
+                "assignedTo",
+                "name email profileImageUrl"
+            );
+        } else {
+            tasks = await Task.find({ ...filter, assignedTo: req.user._id }).populate(
+                "assignedTo",
+                "name email profileImageUrl"
+            );
+        }
         
-        // 4. Add completed todoChecklist count to each task (Your existing logic)
+        // Add completed todoChecklist count to each task
         tasks = await Promise.all(
             tasks.map(async (task) => {
                 const completedCount = task.todoChecklist.filter(
@@ -184,27 +185,26 @@ const getTasks = async (req, res) => {
             })
         );
 
-        // 5. Get Total Count (Needed for frontend pagination numbers)
-        const totalFilteredTasks = await Task.countDocuments(filter);
+        // Status summary count (Existing logic preserved)
+        const allTasks = await Task.countDocuments(
+            req.user.role === "admin" ? {} : { assignedTo: req.user._id }
+        );
 
-        // 6. Status summary count (Your existing logic - keeps dashboard counters working)
-        // These count ALL tasks assigned to the user, ignoring the current page/filter
-        const matchUser = req.user.role === "admin" ? {} : { assignedTo: req.user._id };
+        const pendingTasks = await Task.countDocuments({
+            ...(req.user.role !== "admin" && { assignedTo: req.user._id }),
+            status: "Pending"
+        });
+        const inProgressTasks = await Task.countDocuments({
+            ...(req.user.role !== "admin" && { assignedTo: req.user._id }),
+            status: "In Progress"
+        });
+        const completedTasks = await Task.countDocuments({
+            ...(req.user.role !== "admin" && { assignedTo: req.user._id }),
+            status: "Completed"
+        });
         
-        const allTasks = await Task.countDocuments(matchUser);
-        const pendingTasks = await Task.countDocuments({ ...matchUser, status: "Pending" });
-        const inProgressTasks = await Task.countDocuments({ ...matchUser, status: "In Progress" });
-        const completedTasks = await Task.countDocuments({ ...matchUser, status: "Completed" });
-        
-        // 7. Send Response with Pagination Data
         res.json({
             tasks,
-            pagination: {
-                totalTasks: totalFilteredTasks,
-                totalPages: Math.ceil(totalFilteredTasks / limit),
-                currentPage: Number(page),
-                limit: Number(limit)
-            },
             statusSummary: {
                 all: allTasks, 
                 pendingTasks,
