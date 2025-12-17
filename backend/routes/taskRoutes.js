@@ -11,7 +11,8 @@ const {
   deleteTask,
   updateTaskStatus,
   updateTaskChecklist,
-  createTaskFromAI // 💡 Import the new AI controller
+  createTaskFromAI,
+  generateSubtasks // 💡 Import the new AI controller
 } = require("../controllers/taskControllers");
 
 const router = express.Router();
@@ -25,6 +26,7 @@ router.get("/user-dashboard-data", protect, getUserDashboardData);
 // 2. AI Task Creation (New Route)
 // Must be placed before the dynamic /:id routes to avoid conflict
 router.post("/ai-create", protect, adminOnly, createTaskFromAI); 
+router.post("/ai-generate-subtasks", protect, generateSubtasks);
 
 // 3. CRUD Operations
 router.get("/", protect, getTasks); // Get all tasks (Admin: all, User: assigned)

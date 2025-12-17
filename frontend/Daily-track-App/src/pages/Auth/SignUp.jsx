@@ -200,7 +200,7 @@ const SignUp = () => {
                    </div>
                    <div className="space-y-1">
                        <label className="text-gray-400 text-xs font-semibold ml-1">Full Name</label>
-                       <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="John Doe" className="w-full bg-white/5 border border-white/10 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 block w-full p-3 outline-none placeholder-gray-600 transition-all hover:bg-white/10" />
+                       <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="John Doe" className="bg-white/5 border border-white/10 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 block w-full p-3 outline-none placeholder-gray-600 transition-all hover:bg-white/10" />
                    </div>
                    <div className="space-y-1">
                        <label className="text-gray-400 text-xs font-semibold ml-1">Email Address</label>
@@ -221,7 +221,7 @@ const SignUp = () => {
                    </div>
                    <div className="space-y-1">
                        <label className="text-gray-400 text-xs font-semibold ml-1">Admin Token (Optional)</label>
-                       <input type="text" value={adminInviteToken} onChange={(e) => setAdminInviteToken(e.target.value)} placeholder="Enter invite code" className="w-full bg-white/5 border border-white/10 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 block w-full p-3 outline-none placeholder-gray-600 transition-all hover:bg-white/10" />
+                       <input type="text" value={adminInviteToken} onChange={(e) => setAdminInviteToken(e.target.value)} placeholder="Enter invite code" className="bg-white/5 border border-white/10 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 block w-full p-3 outline-none placeholder-gray-600 transition-all hover:bg-white/10" />
                    </div>
                    <div className="flex items-start gap-3 mt-2 px-1">
                        <input type="checkbox" id="terms" className="mt-1 w-4 h-4 rounded border-gray-600 bg-black/40 text-orange-500 focus:ring-orange-500/20" />

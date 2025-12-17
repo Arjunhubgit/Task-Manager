@@ -21,32 +21,43 @@ const TaskCard = ({
   const getStatusTagColor = () => {
     switch (status) {
       case "In Progress":
-        return "text-sky-600 bg-sky-50 border-sky-200";
+        return "text-cyan-400 bg-cyan-500/10 border border-cyan-500/20";
       case "Completed":
-        return "text-emerald-600 bg-emerald-50 border-emerald-200";
+        return "text-emerald-400 bg-emerald-500/10 border border-emerald-500/20";
       default:
-        return "text-violet-600 bg-violet-50 border-violet-200";
+        return "text-orange-400 bg-orange-500/10 border border-orange-500/20";
     }
   };
 
   const getPriorityTagColor = () => {
     switch (priority) {
       case "Low":
-        return "text-emerald-600 bg-emerald-50 border-emerald-200";
+        return "text-emerald-400 bg-emerald-500/10 border border-emerald-500/20";
       case "Medium":
-        return "text-amber-600 bg-amber-50 border-amber-200";
+        return "text-amber-400 bg-amber-500/10 border border-amber-500/20";
       default:
-        return "text-rose-600 bg-rose-50 border-rose-200";
+        return "text-rose-400 bg-rose-500/10 border border-rose-500/20";
+    }
+  };
+
+  const getStatusBorderColor = () => {
+    switch (status) {
+      case "In Progress":
+        return "border-cyan-500/30";
+      case "Completed":
+        return "border-emerald-500/30";
+      default:
+        return "border-orange-500/30";
     }
   };
 
   return (
     <div
-      className="bg-white rounded-xl p-6 shadow-md border border-gray-200 
-      hover:shadow-xl hover:border-blue-300 transition-all duration-300 cursor-pointer"
+      className={`bg-[#1a1a1a]/60 backdrop-blur-sm rounded-xl p-6 border border-white/10 
+      hover:border-[#EA8D23]/50 hover:bg-[#1a1a1a]/80 transition-all duration-300 cursor-pointer group shadow-lg`}
       onClick={onClick}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 mb-4">
         <span
           className={`text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full border ${getStatusTagColor()}`}
         >
@@ -59,25 +70,19 @@ const TaskCard = ({
         </span>
       </div>
 
-      <div className={`mt-4 border-l-4 rounded-sm pl-4 ${
-        status === "In Progress"
-          ? "border-sky-500"
-          : status === "Completed"
-          ? "border-emerald-500"
-          : "border-violet-500"
-      }`}>
-        <h3 className="text-xl font-bold text-gray-900 leading-tight line-clamp-2">
+      <div className={`border-l-4 rounded-sm pl-4 ${getStatusBorderColor()}`}>
+        <h3 className="text-lg font-bold text-white leading-tight line-clamp-2 group-hover:text-[#EA8D23] transition-colors">
           {title}
         </h3>
-        <p className="text-sm text-gray-600 mt-2 line-clamp-2 leading-relaxed">
+        <p className="text-sm text-gray-400 mt-2 line-clamp-2 leading-relaxed">
           {description}
         </p>
       </div>
 
-      <div className="mt-4 text-sm text-gray-500 flex items-center justify-between">
+      <div className="mt-4 text-sm text-gray-400 flex items-center justify-between">
         <p>
           Tasks Done:{" "}
-          <span className="font-semibold text-gray-800">
+          <span className="font-semibold text-[#EA8D23]">
             {completedTodoCount} / {todoChecklist.length || 0}
           </span>
         </p>
@@ -86,26 +91,26 @@ const TaskCard = ({
         <Progress progress={progress} status={status} />
       </div>
 
-      <div className="grid grid-cols-2 gap-4 mt-6 border-t pt-4 border-gray-200">
+      <div className="grid grid-cols-2 gap-4 mt-6 border-t border-white/10 pt-4">
         <div>
-          <p className="text-xs text-gray-500 font-medium">Start Date</p>
-          <p className="text-sm text-gray-800 font-semibold mt-1">
+          <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Start Date</p>
+          <p className="text-sm text-gray-300 font-semibold mt-1">
             {moment(createdAt).format("MMM Do, YYYY")}
           </p>
         </div>
         <div>
-          <p className="text-xs text-gray-500 font-medium">Due Date</p>
-          <p className="text-sm text-gray-800 font-semibold mt-1">
+          <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Due Date</p>
+          <p className="text-sm text-gray-300 font-semibold mt-1">
             {moment(dueDate).format("MMM Do, YYYY")}
           </p>
         </div>
       </div>
 
-      <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
+      <div className="flex items-center justify-between mt-6 pt-4 border-t border-white/10">
         <AvatarGroup avatars={assignedTo || []} maxVisible={3} />
         {attachmentCount > 0 && (
-          <div className="flex items-center gap-2 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg px-3 py-1">
-            <LuPaperclip className="text-gray-500" />
+          <div className="flex items-center gap-2 text-xs font-medium text-gray-300 bg-white/5 hover:bg-[#EA8D23]/10 border border-white/10 rounded-lg px-3 py-1 transition-colors">
+            <LuPaperclip className="text-[#EA8D23]" />
             <span>{attachmentCount} Attachments</span>
           </div>
         )}

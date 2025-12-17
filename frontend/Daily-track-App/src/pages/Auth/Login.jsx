@@ -144,14 +144,14 @@ const Login = () => {
               <div className="space-y-1">
                 <label className="text-gray-400 text-xs font-semibold ml-1">Email Address</label>
                 <div className="relative">
-                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="arjun@example.com" className="w-full bg-white/5 border border-white/10 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 block w-full p-3 pl-10 outline-none placeholder-gray-600 transition-all hover:bg-white/10" />
+                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="arjun@example.com" className="bg-white/5 border border-white/10 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 block w-full p-3 pl-10 outline-none placeholder-gray-600 transition-all hover:bg-white/10" />
                     <FaEnvelope className="absolute left-3 top-3.5 text-gray-500" />
                 </div>
               </div>
               <div className="space-y-1">
                 <label className="text-gray-400 text-xs font-semibold ml-1">Password</label>
                 <div className="relative">
-                    <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" className="w-full bg-white/5 border border-white/10 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 block w-full p-3 pl-10 pr-10 outline-none placeholder-gray-600 transition-all hover:bg-white/10" />
+                    <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" className="w-full bg-white/5 border border-white/10 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 block p-3 pl-10 pr-10 outline-none placeholder-gray-600 transition-all hover:bg-white/10" />
                     <FaLock className="absolute left-3 top-3.5 text-gray-500" />
                     <button
                       type="button"

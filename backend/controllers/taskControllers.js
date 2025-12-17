@@ -1,15 +1,61 @@
 const Task = require("../models/Task");
-const User = require("../models/User"); // Ensure User model is imported for assignment logic
-// 🛠️ FINAL FIX: Safely import fetch, handling both default export and standard import
+const User = require("../models/User"); 
 const fetched = require('node-fetch');
 const fetch = fetched.default || fetched; 
+const { URLSearchParams } = require('url');
 
 // --- NEW IMPORT FOR CHAT-TO-TASK FEATURE ---
 const { GoogleGenerativeAI, SchemaType } = require("@google/generative-ai");
 
-const { URLSearchParams } = require('url'); 
 
-// Generate JWT Token (Assuming this function is in authControllers.js, but keeping here for context)
+// @desc    Generate subtasks for a given task title/description
+// @route   POST /api/tasks/ai-generate-subtasks
+// @access  Private
+const generateSubtasks = async (req, res) => {
+    try {
+        const { title, description } = req.body;
+
+        if (!process.env.GEMINI_API_KEY) {
+            return res.status(500).json({ message: "AI Service not configured" });
+        }
+
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({
+            model: "gemini-2.0-flash", // Use flash for speed
+            generationConfig: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: SchemaType.ARRAY,
+                    items: {
+                        type: SchemaType.OBJECT,
+                        properties: {
+                            text: { type: SchemaType.STRING },
+                            completed: { type: SchemaType.BOOLEAN }
+                        }
+                    }
+                }
+            }
+        });
+
+        const prompt = `
+            Act as a project manager. Break down the following task into 3-6 actionable, bite-sized subtasks.
+            Task: "${title}"
+            Context: "${description || ''}"
+            
+            Return ONLY a JSON array of objects with "text" and "completed" (false) fields.
+        `;
+
+        const result = await model.generateContent(prompt);
+        const subtasks = JSON.parse(result.response.text());
+
+        res.json(subtasks);
+
+    } catch (error) {
+        console.error("AI Subtask Error:", error);
+        res.status(500).json({ message: "Failed to generate subtasks" });
+    }
+};
+
 const jwt = require("jsonwebtoken");
 const generateToken = (userId) => {
   return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "30d" }); 
@@ -100,31 +146,35 @@ const getAIPriorityAndSummary = async (taskDescription, userRole) => {
 // --- CORE CONTROLLERS ---
 // =====================================================================
 
-// @desc    Get all tasks (Admin: all, User: only assigned tasks)
+// @desc    Get all tasks (Admin: all, User: only assigned tasks) with Pagination
 // @route   GET /api/tasks/
 // @access  Private
 const getTasks = async (req, res) => {
     try {
-        const { status } = req.query;
+        // 1. Extract Query Parameters (Status filter + Pagination)
+        const { status, page = 1, limit = 10 } = req.query;
+        const skip = (page - 1) * limit;
+
         let filter = {};
         if (status) {
             filter.status = status;
         }
 
-        let tasks;
-        if (req.user.role === "admin") {
-            tasks = await Task.find(filter).populate(
-                "assignedTo",
-                "name email profileImageUrl"
-            );
-        } else {
-            tasks = await Task.find({ ...filter, assignedTo: req.user._id }).populate(
-                "assignedTo",
-                "name email profileImageUrl"
-            );
+        // 2. Role-based Access Control logic
+        // If not admin, restrict filter to the current user's ID
+        if (req.user.role !== "admin") {
+            filter.assignedTo = req.user._id;
         }
+
+        // 3. Fetch Paginated Tasks
+        // We add .sort(), .skip(), and .limit() here
+        let tasks = await Task.find(filter)
+            .populate("assignedTo", "name email profileImageUrl")
+            .sort({ createdAt: -1 }) // Sort by newest first (Professional standard)
+            .skip(parseInt(skip))
+            .limit(parseInt(limit));
         
-        // Add completed todoChecklist count to each task
+        // 4. Add completed todoChecklist count to each task (Your existing logic)
         tasks = await Promise.all(
             tasks.map(async (task) => {
                 const completedCount = task.todoChecklist.filter(
@@ -134,26 +184,27 @@ const getTasks = async (req, res) => {
             })
         );
 
-        // Status summary count
-        const allTasks = await Task.countDocuments(
-            req.user.role === "admin" ? {} : { assignedTo: req.user._id }
-        );
+        // 5. Get Total Count (Needed for frontend pagination numbers)
+        const totalFilteredTasks = await Task.countDocuments(filter);
 
-        const pendingTasks = await Task.countDocuments({
-            ...(req.user.role !== "admin" && { assignedTo: req.user._id }),
-            status: "Pending"
-        });
-        const inProgressTasks = await Task.countDocuments({
-            ...(req.user.role !== "admin" && { assignedTo: req.user._id }),
-            status: "In Progress"
-        });
-        const completedTasks = await Task.countDocuments({
-            ...(req.user.role !== "admin" && { assignedTo: req.user._id }),
-            status: "Completed"
-        });
+        // 6. Status summary count (Your existing logic - keeps dashboard counters working)
+        // These count ALL tasks assigned to the user, ignoring the current page/filter
+        const matchUser = req.user.role === "admin" ? {} : { assignedTo: req.user._id };
         
+        const allTasks = await Task.countDocuments(matchUser);
+        const pendingTasks = await Task.countDocuments({ ...matchUser, status: "Pending" });
+        const inProgressTasks = await Task.countDocuments({ ...matchUser, status: "In Progress" });
+        const completedTasks = await Task.countDocuments({ ...matchUser, status: "Completed" });
+        
+        // 7. Send Response with Pagination Data
         res.json({
             tasks,
+            pagination: {
+                totalTasks: totalFilteredTasks,
+                totalPages: Math.ceil(totalFilteredTasks / limit),
+                currentPage: Number(page),
+                limit: Number(limit)
+            },
             statusSummary: {
                 all: allTasks, 
                 pendingTasks,
@@ -648,5 +699,6 @@ module.exports = {
     updateTaskChecklist,
     getDashboardData,
     getUserDashboardData,
-    createTaskFromAI // Exporting the new AI controller
+    createTaskFromAI,
+    generateSubtasks
 };
