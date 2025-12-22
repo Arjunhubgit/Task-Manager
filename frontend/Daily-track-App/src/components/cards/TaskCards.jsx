@@ -122,10 +122,15 @@ const TaskCard = ({
       <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
         <AvatarGroup
           avatars={assignedTo || []}
-          maxVisible={3}
+          maxVisible={10}
           onAvatarClick={onAvatarClick} // <--- PASS IT DOWN
         />
-        {/* ... */}
+        {attachmentCount > 0 && (
+          <div className="flex items-center gap-2 text-xs font-medium text-gray-300 bg-white/5 hover:bg-[#EA8D23]/10 border border-white/10 rounded-lg px-3 py-1 transition-colors">
+            <LuPaperclip className="text-[#EA8D23]" />
+            <span>{attachmentCount} Attachments</span>
+          </div>
+        )}
       </div>
     </div>
 

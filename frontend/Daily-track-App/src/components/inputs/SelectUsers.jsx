@@ -1,12 +1,9 @@
-import React from "react";
-import { useState } from "react";
-import { useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import axiosInstance from "../../utils/axiosInstance";
 import { API_PATHS } from "../../utils/apiPaths";
 import { LuUsers } from "react-icons/lu";
 import Modal from "../Modal";
 import AvatarGroup from "../AvatarGroup";
-
 
 const SelectUsers = ({ selectedUsers, setSelectedUsers }) => {
     const [allUsers, setAllUsers] = useState([]);
@@ -37,32 +34,39 @@ const SelectUsers = ({ selectedUsers, setSelectedUsers }) => {
         setIsModalOpen(false);
     };
 
-    const selectedUserAvatars = allUsers
-        .filter((user) => selectedUsers.includes(user._id))
-        .map((user) => user.profileImageUrl);
+    // 🛠️ FIX 1: Filter full User Objects instead of just strings
+    // This allows AvatarGroup to show the user's Name on hover
+    const selectedUserData = allUsers.filter((user) => selectedUsers.includes(user._id));
 
     useEffect(() => {
         getAllUsers();
     }, []);
 
+    // 🛠️ FIX 2: Correctly sync temp state whenever props change
+    // This ensures checkboxes are checked when you open the "Update Task" page
     useEffect(() => {
-        if (selectedUsers.length === 0) {
-            setTempSelectedUsers([]);
-        }
-
-        return () => { };
+        setTempSelectedUsers(selectedUsers || []);
     }, [selectedUsers]);
+
     return (
         <div className="space-y-4 mt-2">
-            {selectedUserAvatars.length === 0 && (
-                <button className="card-btn" onClick={() => setIsModalOpen(true)}>
+            {selectedUserData.length === 0 && (
+                <button 
+                    type="button" // Best practice to prevent form submit
+                    className="card-btn" 
+                    onClick={() => setIsModalOpen(true)}
+                >
                     <LuUsers className="text-sm text-white" /> <p className="text-white ml-2">Add Members</p>
                 </button>
             )}
 
-            {selectedUserAvatars.length > 0 && (
+            {selectedUserData.length > 0 && (
                 <div className="cursor-pointer" onClick={() => setIsModalOpen(true)}>
-                    <AvatarGroup avatars={selectedUserAvatars} maxVisible={3} />
+                    {/* 🛠️ FIX 3: Pass objects & set maxVisible high to show ALL profiles */}
+                    <AvatarGroup 
+                        avatars={selectedUserData} 
+                        maxVisible={50} // Show all assigned members (up to 50)
+                    />
                 </div>
             )}
 
@@ -71,20 +75,26 @@ const SelectUsers = ({ selectedUsers, setSelectedUsers }) => {
                 onClose={() => setIsModalOpen(false)}
                 title="Select Users"
             >
-                <div className="space-y-3 h-[60vh] overflow-y-auto pr-2 bg-gray-900 pb-4">
+                <div className="space-y-3 h-[60vh] overflow-y-auto pr-2 bg-gray-900 pb-4 custom-scrollbar">
                     {allUsers.map((user) => (
                         <div
                             key={user._id}
-                            className="flex items-center gap-4 p-3 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 hover:border-[#EA8D23]/30 transition-all duration-200 cursor-pointer group"
+                            className={`flex items-center gap-4 p-3 rounded-lg border transition-all duration-200 cursor-pointer group ${
+                                tempSelectedUsers.includes(user._id) 
+                                ? "bg-purple-500/10 border-purple-500/50" 
+                                : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-[#EA8D23]/30"
+                            }`}
                             onClick={() => toggleUserSelection(user._id)}
                         >
                             <img
-                                src={user.profileImageUrl}
+                                src={user.profileImageUrl || "https://ui-avatars.com/api/?name=" + user.name}
                                 alt={user.name}
                                 className="w-12 h-12 rounded-full object-cover border-2 border-white/20 shadow group-hover:border-[#EA8D23]/50 group-hover:scale-105 transition-all duration-200"
                             />
                             <div className="flex-1 min-w-0">
-                                <p className="font-semibold text-white truncate">{user.name}</p>
+                                <p className={`font-semibold truncate ${tempSelectedUsers.includes(user._id) ? "text-purple-400" : "text-white"}`}>
+                                    {user.name}
+                                </p>
                                 <p className="text-sm text-gray-400 truncate">{user.email}</p>
                             </div>
                             <input
@@ -115,7 +125,6 @@ const SelectUsers = ({ selectedUsers, setSelectedUsers }) => {
             </Modal>
         </div>
     );
-
 };
 
 export default SelectUsers;
