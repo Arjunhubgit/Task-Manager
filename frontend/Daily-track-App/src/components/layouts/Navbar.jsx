@@ -5,7 +5,7 @@ import Logo_img2 from '../../assets/images/logo2.png';
 import SearchBar from '../navbar/SearchBar';
 import NotificationsBell from '../navbar/NotificationsBell';
 import QuickCreateButton from '../navbar/QuickCreateButton';
-#3
+
 // --- Sub-Component for Logo and Brand ---
 const Brand = () => (
     <div className="flex items-center gap-3 flex-shrink-0 group cursor-pointer">
