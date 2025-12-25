@@ -5,7 +5,7 @@ import Logo_img2 from '../../assets/images/logo2.png';
 import SearchBar from '../navbar/SearchBar';
 import NotificationsBell from '../navbar/NotificationsBell';
 import QuickCreateButton from '../navbar/QuickCreateButton';
-
+#3
 // --- Sub-Component for Logo and Brand ---
 const Brand = () => (
     <div className="flex items-center gap-3 flex-shrink-0 group cursor-pointer">
@@ -30,6 +30,7 @@ const DESKTOP_LINKS = [
 const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
     const { user, clearUser } = useContext(UserContext); // Get user data and logout function
     const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [userStatus, setUserStatus] = useState('online'); // 'online', 'idle', 'dnd', 'invisible'
     const profileRef = useRef(null);
 
     const handleMenuToggle = useCallback(() => {
@@ -82,6 +83,7 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                             `}
                         >
                             {link.label}
+                            
                             {activeMenu === link.label && (
                                 <span className="absolute bottom-[-1.25rem] left-0 w-full h-[2px] bg-[#EA8D23] shadow-[0_0_10px_#EA8D23]"></span>
                             )}
@@ -118,24 +120,23 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                                     <img 
                                         src={user.profileImageUrl} 
                                         alt={user.name} 
-                                        className="w-9 h-9 rounded-full object-cover border-2 border-orange-500/20 group-hover:border-orange-500/50 transition-colors"
+                                        className="w-10 h-10 rounded-full object-cover border-2 border-orange-500/20 group-hover:border-orange-500/50 transition-colors"
                                     />
                                 ) : (
-                                    <div className="w-9 h-9 rounded-full bg-orange-500/10 flex items-center justify-center border-2 border-orange-500/20 text-[#EA8D23]">
+                                    <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center border-2 border-orange-500/20 text-[#EA8D23]">
                                         <UserIcon className="w-5 h-5" />
                                     </div>
                                 )}
-                                
-                                {/* --- ONLINE/OFFLINE LABEL --- */}
+
+                                {/* STATUS INDICATOR */}
                                 <div className={`
-                                    absolute -bottom-1 -right-2 z-20 rounded-full border-2 border-[#1a1a1a] px-1.5 py-[1px]
-                                    flex items-center justify-center
-                                    ${isOnline ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" : "bg-gray-500"}
-                                `}>
-                                    <span className="text-[8px] font-bold text-white uppercase tracking-wider leading-none">
-                                        {isOnline ? "Online" : "Offline"}
-                                    </span>
-                                </div>
+                                    absolute bottom-0 right-0 z-20 rounded-full border-3 border-[#050505]
+                                    flex items-center justify-center w-3.5 h-3.5 transition-all duration-200
+                                    ${userStatus === 'online' ? 'bg-emerald-500 shadow-lg shadow-emerald-500/60' : ''}
+                                    ${userStatus === 'idle' ? 'bg-yellow-500 shadow-lg shadow-yellow-500/60' : ''}
+                                    ${userStatus === 'dnd' ? 'bg-red-500 shadow-lg shadow-red-500/60' : ''}
+                                    ${userStatus === 'invisible' ? 'bg-gray-600 shadow-lg shadow-gray-600/40' : ''}
+                                `} />
                             </div>
 
                             {/* User Info (Desktop only) */}
@@ -152,10 +153,76 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                             absolute right-0 top-full mt-3 w-56 bg-[#0A0A0A] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 transform transition-all duration-200 origin-top-right
                             ${isProfileOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'}
                         `}>
+                            {/* User Info Section */}
                             <div className="p-4 border-b border-white/5 bg-white/[0.02]">
                                 <p className="text-sm font-medium text-white">Signed in as</p>
                                 <p className="text-xs text-gray-400 truncate mt-0.5">{user.email}</p>
                             </div>
+
+                            {/* Status Selection Section */}
+                            <div className="p-3 border-b border-white/5">
+                                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide px-2 mb-2">Status</p>
+                                
+                                {/* Online */}
+                                <button
+                                    onClick={() => setUserStatus('online')}
+                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left mb-1.5 ${
+                                        userStatus === 'online'
+                                            ? 'bg-emerald-500/15 text-emerald-300'
+                                            : 'text-gray-300 hover:bg-white/5 hover:text-white'
+                                    }`}
+                                >
+                                    <div className="w-3 h-3 rounded-full bg-emerald-500 flex-shrink-0"></div>
+                                    <span className="text-sm font-medium">Online</span>
+                                </button>
+
+                                {/* Idle */}
+                                <button
+                                    onClick={() => setUserStatus('idle')}
+                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left mb-1.5 ${
+                                        userStatus === 'idle'
+                                            ? 'bg-yellow-500/15 text-yellow-300'
+                                            : 'text-gray-300 hover:bg-white/5 hover:text-white'
+                                    }`}
+                                >
+                                    <div className="w-3 h-3 rounded-full bg-yellow-500 flex-shrink-0"></div>
+                                    <span className="text-sm font-medium">Idle</span>
+                                </button>
+
+                                {/* Do Not Disturb */}
+                                <button
+                                    onClick={() => setUserStatus('dnd')}
+                                    className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-lg transition-colors text-left mb-1.5 ${
+                                        userStatus === 'dnd'
+                                            ? 'bg-red-500/15 text-red-300'
+                                            : 'text-gray-300 hover:bg-white/5 hover:text-white'
+                                    }`}
+                                >
+                                    <div className="w-3 h-3 rounded-full bg-red-500 flex-shrink-0 mt-0.5"></div>
+                                    <div>
+                                        <span className="text-sm font-medium block">Do Not Disturb</span>
+                                        <span className="text-xs text-gray-500 block mt-0.5">You won't receive notifications</span>
+                                    </div>
+                                </button>
+
+                                {/* Invisible */}
+                                <button
+                                    onClick={() => setUserStatus('invisible')}
+                                    className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${
+                                        userStatus === 'invisible'
+                                            ? 'bg-gray-500/15 text-gray-300'
+                                            : 'text-gray-300 hover:bg-white/5 hover:text-white'
+                                    }`}
+                                >
+                                    <div className="w-3 h-3 rounded-full bg-gray-500 flex-shrink-0 mt-0.5"></div>
+                                    <div>
+                                        <span className="text-sm font-medium block">Invisible</span>
+                                        <span className="text-xs text-gray-500 block mt-0.5">You appear offline</span>
+                                    </div>
+                                </button>
+                            </div>
+
+                            {/* Profile & Settings */}
                             <div className="p-1">
                                 <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors text-left">
                                     <UserIcon className="w-4 h-4" /> Profile
@@ -164,6 +231,8 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                                     <Settings className="w-4 h-4" /> Settings
                                 </button>
                             </div>
+
+                            {/* Sign Out */}
                             <div className="p-1 border-t border-white/5">
                                 <button 
                                     onClick={clearUser}
@@ -174,6 +243,7 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                             </div>
                         </div>
                     </div>
+                    
                 ) : (
                     // Fallback for when no user is logged in (Offline State)
                     <div className="flex items-center gap-3">

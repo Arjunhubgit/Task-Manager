@@ -1,49 +1,26 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useContext } from 'react';
 import { Bell, CheckCircle, AlertCircle, MessageSquare, UserPlus, Clock, X } from 'lucide-react';
+import { UserContext } from '../../context/userContext';
 
 const NotificationsBell = () => {
     const [isOpen, setIsOpen] = useState(false);
-    const [notifications, setNotifications] = useState([
-        {
-            id: 1,
-            type: 'task_assigned',
-            title: 'New task assigned',
-            message: 'You have been assigned "Complete project proposal"',
-            icon: AlertCircle,
-            read: false,
-            timestamp: '5 mins ago',
-        },
-        {
-            id: 2,
-            type: 'comment',
-            title: 'New comment',
-            message: 'Sarah commented on your task',
-            icon: MessageSquare,
-            read: false,
-            timestamp: '15 mins ago',
-        },
-        {
-            id: 3,
-            type: 'task_completed',
-            title: 'Task completed',
-            message: 'Mike marked "Design review" as completed',
-            icon: CheckCircle,
-            read: true,
-            timestamp: '1 hour ago',
-        },
-        {
-            id: 4,
-            type: 'team_member',
-            title: 'Team member added',
-            message: 'Alice Johnson joined the team',
-            icon: UserPlus,
-            read: true,
-            timestamp: '2 hours ago',
-        },
-    ]);
+    const { notifications, markNotificationAsRead, deleteNotification, markAllNotificationsAsRead } = useContext(UserContext);
 
     const notificationsRef = useRef(null);
     const unreadCount = notifications.filter(n => !n.read).length;
+
+    // Map notification types to icons
+    const getIconComponent = (notificationType) => {
+        const iconMap = {
+            'task_assigned': AlertCircle,
+            'task_completed': CheckCircle,
+            'comment': MessageSquare,
+            'team_member': UserPlus,
+            'status_update': AlertCircle,
+            'deadline_reminder': Clock,
+        };
+        return iconMap[notificationType] || Bell;
+    };
 
     // Close when clicking outside
     useEffect(() => {
@@ -57,18 +34,23 @@ const NotificationsBell = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const handleMarkAsRead = (id) => {
-        setNotifications(notifications.map(n =>
-            n.id === id ? { ...n, read: true } : n
-        ));
-    };
+    // Format timestamp to relative time
+    const formatTimestamp = (createdAt) => {
+        if (!createdAt) return 'just now';
+        
+        const now = new Date();
+        const notificationTime = new Date(createdAt);
+        const diffMs = now - notificationTime;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
 
-    const handleDeleteNotification = (id) => {
-        setNotifications(notifications.filter(n => n.id !== id));
-    };
-
-    const handleMarkAllAsRead = () => {
-        setNotifications(notifications.map(n => ({ ...n, read: true })));
+        if (diffMins < 1) return 'just now';
+        if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+        if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+        if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+        
+        return notificationTime.toLocaleDateString();
     };
 
     const getIconColor = (type) => {
@@ -110,7 +92,7 @@ const NotificationsBell = () => {
                         <h3 className="font-semibold text-white text-sm">Notifications</h3>
                         {unreadCount > 0 && (
                             <button
-                                onClick={handleMarkAllAsRead}
+                                onClick={markAllNotificationsAsRead}
                                 className="text-xs text-orange-500 hover:text-orange-400 transition-colors font-medium"
                             >
                                 Mark all as read
@@ -127,14 +109,15 @@ const NotificationsBell = () => {
                             </div>
                         ) : (
                             notifications.map(notification => {
-                                const Icon = notification.icon;
+                                const notificationId = notification._id || notification.id;
+                                const Icon = getIconComponent(notification.type);
                                 return (
                                     <div
-                                        key={notification.id}
+                                        key={notificationId}
                                         className={`p-3 border-b border-white/5 hover:bg-white/[0.02] transition-colors group cursor-pointer ${
-                                            !notification.read ? 'bg-white/[0.04]' : ''
+                                            !notification.read ? 'bg-white/[0.04] border-l-2 border-l-orange-500' : ''
                                         }`}
-                                        onClick={() => handleMarkAsRead(notification.id)}
+                                        onClick={() => markNotificationAsRead(notificationId)}
                                     >
                                         <div className="flex gap-3">
                                             {/* Icon */}
@@ -160,12 +143,12 @@ const NotificationsBell = () => {
                                                 <div className="flex items-center justify-between mt-2">
                                                     <span className="text-xs text-gray-600 flex items-center gap-1">
                                                         <Clock className="w-3 h-3" />
-                                                        {notification.timestamp}
+                                                        {formatTimestamp(notification.createdAt)}
                                                     </span>
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            handleDeleteNotification(notification.id);
+                                                            deleteNotification(notificationId);
                                                         }}
                                                         className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/5 transition-all"
                                                     >

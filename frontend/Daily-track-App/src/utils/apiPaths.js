@@ -38,6 +38,15 @@ export const API_PATHS = {
     EXPORT_USERS: "/api/reports/export/users"
   },
 
+  NOTIFICATIONS: {
+    GET_USER_NOTIFICATIONS: (userId) => `/api/notifications/user/${userId}`,
+    GET_UNREAD_COUNT: (userId) => `/api/notifications/unread/${userId}`,
+    MARK_AS_READ: (notificationId) => `/api/notifications/${notificationId}/read`,
+    MARK_ALL_AS_READ: (userId) => `/api/notifications/user/${userId}/read-all`,
+    DELETE_NOTIFICATION: (notificationId) => `/api/notifications/${notificationId}`,
+    DELETE_ALL_NOTIFICATIONS: (userId) => `/api/notifications/user/${userId}/delete-all`,
+  },
+
   IMAGE: {
     UPLOAD_IMAGE: "/api/auth/upload-image",
   },

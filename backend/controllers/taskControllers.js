@@ -1,5 +1,6 @@
 const Task = require("../models/Task");
 const User = require("../models/User");
+const Notification = require("../models/Notification");
 const Groq = require("groq-sdk"); // 💡 Using Groq SDK
 const jwt = require("jsonwebtoken");
 
@@ -123,6 +124,32 @@ const createTask = async (req, res) => {
             createdBy: req.user._id, todoChecklist, attachments, aiSummary 
         });
         await task.save();
+
+        // 🔔 Create notifications for assigned users
+        const creatorUser = await User.findById(req.user._id);
+        const creatorName = creatorUser?.name || 'Admin';
+
+        for (const userId of assignedTo) {
+            // Don't notify the creator if they're in the assignedTo list
+            if (userId.toString() !== req.user._id.toString()) {
+                try {
+                    const notification = new Notification({
+                        userId,
+                        type: 'task_assigned',
+                        title: 'New task assigned',
+                        message: `You have been assigned "${title}" by ${creatorName}`,
+                        relatedTaskId: task._id,
+                        relatedUserId: req.user._id,
+                    });
+                    await notification.save();
+                    console.log(`✅ Notification created for user ${userId}`);
+                } catch (notifError) {
+                    console.error(`Error creating notification for user ${userId}:`, notifError);
+                    // Don't fail the task creation if notification creation fails
+                }
+            }
+        }
+
         res.status(201).json({ message: "Task created successfully", task });
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });

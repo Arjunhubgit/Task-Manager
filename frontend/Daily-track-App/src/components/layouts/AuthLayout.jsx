@@ -1,6 +1,5 @@
 import { FaTasks } from 'react-icons/fa';
 import UI_IMG from '../../assets/images/robot-img.png';
-import Scene3D from '../Scene3D.jsx';
 import Logo_img from '../../assets/images/logo.png';
 
 const AuthLayout = ({ children }) => {
@@ -9,11 +8,6 @@ const AuthLayout = ({ children }) => {
             {/* --- Ambient Background Glows (Matching Login/Signup) --- */}
             <div className="fixed top-[-10%] left-[-5%] w-[50vw] h-[50vw] bg-purple-900/10 rounded-full blur-[120px] pointer-events-none z-0" />
             <div className="fixed bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] bg-orange-600/10 rounded-full blur-[120px] pointer-events-none z-0" />
-
-            {/* Background: Scene3D - Fixed & Low Opacity to blend */}
-            <div className="fixed inset-0 z-0 opacity-80">
-                <Scene3D />
-            </div>
             
             {/* Content Container */}
             <div className="relative z-10 w-full h-full overflow-y-auto custom-scrollbar">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import DashboardLayout from '../../components/layouts/DashboardLayout';
 import axiosInstance from "../../utils/axiosInstance";
 import { API_PATHS } from "../../utils/apiPaths";
@@ -10,11 +10,13 @@ import SelectUsers from '../../components/inputs/SelectUsers';
 import TodoListInput from '../../components/inputs/TodoListInput.jsx';
 import AddAttachmentsInput from '../../components/inputs/AddAttachmentsInput';
 import AIChatInput from '../../components/inputs/AIChatInput';
+import { UserContext } from '../../context/userContext';
 
 const CreateTask = () => {
   const location = useLocation();
   const { taskId } = location.state || {};
   const navigate = useNavigate();
+  const { user } = useContext(UserContext);
 
   // 1. ADDED 'priority' to initial state
   const [taskData, setTaskData] = useState({
@@ -64,6 +66,8 @@ const CreateTask = () => {
         todoChecklist: todoList,
       });
 
+      // Task created successfully - notifications will be sent by backend
+      console.log('✅ Task created successfully. Notifications sent to assigned users by backend.');
       toast.success("Task Created Successfully");
       clearData();
     } catch (error) {
