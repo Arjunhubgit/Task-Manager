@@ -2,6 +2,7 @@ import React, { useContext, useState } from "react";
 import { UserContext } from "../../context/userContext";
 import Navbar from "./Navbar";
 import SideMenu from "./SideMenu";
+import Footer from "./Footer";
 
 const DashboardLayout = ({ children, activeMenu }) => {
     const { user } = useContext(UserContext);
@@ -12,7 +13,7 @@ const DashboardLayout = ({ children, activeMenu }) => {
     };
 
     return (
-        <div className="min-h-screen bg-[#050505] text-gray-200 font-sans selection:bg-orange-500/30 selection:text-orange-200">
+        <div className="min-h-screen bg-[#050505] text-gray-200 font-sans selection:bg-orange-500/30 selection:text-orange-200 flex flex-col">
             
             <Navbar 
                 activeMenu={activeMenu} 
@@ -21,7 +22,7 @@ const DashboardLayout = ({ children, activeMenu }) => {
             />
 
             {user && (
-                <div className="flex h-[calc(100vh-4.5rem)]"> {/* Adjusted height for slightly taller navbar */}
+                <div className="flex flex-1 h-[calc(100vh-4.5rem)]"> {/* Adjusted height for slightly taller navbar */}
                     
                     {/* Desktop Sidebar */}
                     <SideMenu activeMenu={activeMenu} isMobile={false} />
@@ -68,6 +69,9 @@ const DashboardLayout = ({ children, activeMenu }) => {
                     </div>
                 </div>
             )}
+
+            {/* Footer */}
+            <Footer />
         </div>
     );
 };

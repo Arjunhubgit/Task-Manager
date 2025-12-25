@@ -1,6 +1,10 @@
-import React, { useState, useCallback } from 'react';
-import { Menu, X, LayoutDashboard, Settings, Users, CheckSquare } from "lucide-react";
+import React, { useState, useCallback, useContext, useEffect, useRef } from 'react';
+import { Menu, X, LayoutDashboard, Settings, Users, CheckSquare, LogOut, ChevronDown, User as UserIcon } from "lucide-react";
+import { UserContext } from '../../context/userContext'; // Import User Context
 import Logo_img2 from '../../assets/images/logo2.png';
+import SearchBar from '../navbar/SearchBar';
+import NotificationsBell from '../navbar/NotificationsBell';
+import QuickCreateButton from '../navbar/QuickCreateButton';
 
 // --- Sub-Component for Logo and Brand ---
 const Brand = () => (
@@ -24,57 +28,162 @@ const DESKTOP_LINKS = [
 ];
 
 const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
-    
+    const { user, clearUser } = useContext(UserContext); // Get user data and logout function
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const profileRef = useRef(null);
+
     const handleMenuToggle = useCallback(() => {
         if (onMenuToggle) {
             onMenuToggle();
         }
     }, [onMenuToggle]);
 
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (profileRef.current && !profileRef.current.contains(event.target)) {
+                setIsProfileOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const isOnline = !!user; // Determine online status
+
     return (
         <nav className="flex items-center justify-between px-4 sm:px-6 py-4 bg-[#050505]/80 backdrop-blur-xl border-b border-white/10 sticky top-0 z-[100] transition-all duration-300">
             
             {/* Left Section: Mobile Toggle and Brand */}
             <div className="flex items-center gap-4">
-                
-                {/* Mobile Menu Toggle */}
                 <button
                     className='lg:hidden text-gray-400 hover:text-[#EA8D23] focus:outline-none p-2 rounded-full transition-colors duration-200 hover:bg-white/5'
                     onClick={handleMenuToggle}
                     aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
-                    aria-expanded={isMobileMenuOpen}
                 >
-                    {isMobileMenuOpen ? (
-                        <X className="w-6 h-6 text-red-500" />
-                    ) : (
-                        <Menu className="w-6 h-6" />
-                    )}
+                    {isMobileMenuOpen ? <X className="w-6 h-6 text-red-500" /> : <Menu className="w-6 h-6" />}
                 </button>
-                
                 <Brand />
             </div>
             
-            {/* Right Section: Desktop Navigation Links */}
+            {/* Center Section: Desktop Navigation Links and Search */}
             <div className="hidden lg:flex items-center gap-8">
-                {DESKTOP_LINKS.map(link => (
-                    <a 
-                        key={link.label}
-                        href={link.href} 
-                        className={`
-                            relative text-sm font-medium tracking-wide transition-all duration-300 px-2 py-1
-                            ${activeMenu === link.label 
-                                ? "text-[#EA8D23]" 
-                                : "text-gray-400 hover:text-white"
-                            }
-                        `}
-                    >
-                        {link.label}
-                        {/* Active Underline Glow */}
-                        {activeMenu === link.label && (
-                            <span className="absolute bottom-[-1.25rem] left-0 w-full h-[2px] bg-[#EA8D23] shadow-[0_0_10px_#EA8D23]"></span>
-                        )}
-                    </a>
-                ))}
+                <div className="flex items-center gap-8">
+                    {DESKTOP_LINKS.map(link => (
+                        <a 
+                            key={link.label}
+                            href={link.href} 
+                            className={`
+                                relative text-sm font-medium tracking-wide transition-all duration-300 px-2 py-1
+                                ${activeMenu === link.label 
+                                    ? "text-[#EA8D23]" 
+                                    : "text-gray-400 hover:text-white"
+                                }
+                            `}
+                        >
+                            {link.label}
+                            {activeMenu === link.label && (
+                                <span className="absolute bottom-[-1.25rem] left-0 w-full h-[2px] bg-[#EA8D23] shadow-[0_0_10px_#EA8D23]"></span>
+                            )}
+                        </a>
+                    ))}
+                </div>
+                
+                {/* Search Bar */}
+                <SearchBar />
+            </div>
+
+            {/* Right Section: Quick Create, Notifications, and User Profile */}
+            <div className="flex items-center gap-3" ref={profileRef}>
+                {user && (
+                    <>
+                        {/* Quick Create Button */}
+                        <QuickCreateButton />
+                        
+                        {/* Notifications Bell */}
+                        <NotificationsBell />
+                    </>
+                )}
+                
+                {user ? (
+                    <div className="relative">
+                        {/* Profile Button */}
+                        <button 
+                            onClick={() => setIsProfileOpen(!isProfileOpen)}
+                            className="flex items-center gap-3 pl-2 pr-4 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 hover:border-orange-500/30 transition-all duration-300 group"
+                        >
+                            {/* Avatar Container */}
+                            <div className="relative">
+                                {user.profileImageUrl ? (
+                                    <img 
+                                        src={user.profileImageUrl} 
+                                        alt={user.name} 
+                                        className="w-9 h-9 rounded-full object-cover border-2 border-orange-500/20 group-hover:border-orange-500/50 transition-colors"
+                                    />
+                                ) : (
+                                    <div className="w-9 h-9 rounded-full bg-orange-500/10 flex items-center justify-center border-2 border-orange-500/20 text-[#EA8D23]">
+                                        <UserIcon className="w-5 h-5" />
+                                    </div>
+                                )}
+                                
+                                {/* --- ONLINE/OFFLINE LABEL --- */}
+                                <div className={`
+                                    absolute -bottom-1 -right-2 z-20 rounded-full border-2 border-[#1a1a1a] px-1.5 py-[1px]
+                                    flex items-center justify-center
+                                    ${isOnline ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" : "bg-gray-500"}
+                                `}>
+                                    <span className="text-[8px] font-bold text-white uppercase tracking-wider leading-none">
+                                        {isOnline ? "Online" : "Offline"}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* User Info (Desktop only) */}
+                            <div className="text-left hidden md:block">
+                                <p className="text-sm font-semibold text-gray-200 leading-none group-hover:text-white transition-colors">{user.name}</p>
+                                <p className="text-[10px] text-gray-400 mt-1 capitalize leading-none">{user.role || 'Member'}</p>
+                            </div>
+                            
+                            <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform duration-300 ${isProfileOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {/* Dropdown Menu */}
+                        <div className={`
+                            absolute right-0 top-full mt-3 w-56 bg-[#0A0A0A] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 transform transition-all duration-200 origin-top-right
+                            ${isProfileOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'}
+                        `}>
+                            <div className="p-4 border-b border-white/5 bg-white/[0.02]">
+                                <p className="text-sm font-medium text-white">Signed in as</p>
+                                <p className="text-xs text-gray-400 truncate mt-0.5">{user.email}</p>
+                            </div>
+                            <div className="p-1">
+                                <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors text-left">
+                                    <UserIcon className="w-4 h-4" /> Profile
+                                </button>
+                                <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors text-left">
+                                    <Settings className="w-4 h-4" /> Settings
+                                </button>
+                            </div>
+                            <div className="p-1 border-t border-white/5">
+                                <button 
+                                    onClick={clearUser}
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors text-left"
+                                >
+                                    <LogOut className="w-4 h-4" /> Sign out
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    // Fallback for when no user is logged in (Offline State)
+                    <div className="flex items-center gap-3">
+                         <div className="px-3 py-1.5 rounded-full border border-gray-700 bg-gray-800/50 flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-gray-500"></div>
+                            <span className="text-xs font-medium text-gray-400">Offline</span>
+                         </div>
+                         <a href="/login" className="text-sm text-[#EA8D23] hover:text-orange-400 font-medium transition-colors">Login</a>
+                    </div>
+                )}
             </div>
         </nav>
     );

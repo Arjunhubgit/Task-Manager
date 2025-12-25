@@ -2,8 +2,9 @@ const express = require("express");
 // 1. FIX: Add 'googleLogin' to the destructured import list
 const { 
   registerUser, 
-  loginUser, 
-  googleLogin, // <--- Added this
+  loginUser,
+  logoutUser, 
+  googleLogin, 
   getUserProfile, 
   updateUserProfile 
 } = require("../controllers/authControllers");
@@ -16,6 +17,7 @@ const upload = require("../middlewares/uploadMiddleware");
 // Auth Routes
 router.post("/register", registerUser); 
 router.post("/login", loginUser); 
+router.post('/logout', protect, logoutUser);
 
 // 2. FIX: Use the function name directly (not authController.googleLogin)
 router.post("/google-login", googleLogin); 

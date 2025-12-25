@@ -4,7 +4,7 @@ const jwt = require("jsonwebtoken");
 
 // Generate JWT Token
 const generateToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "7d" });
+    return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "7d" });
 };
 
 // /**
@@ -42,7 +42,8 @@ const registerUser = async (req, res) => {
             email,
             password: hashedPassword,
             profileImageUrl: profileImageUrl,
-            role
+            role,
+            isOnline: true
         });
 
         res.status(201).json({
@@ -82,6 +83,10 @@ const loginUser = async (req, res) => {
             return res.status(401).json({ message: "Invalid email or password" });
         }
 
+
+        user.isOnline = true;
+        await user.save();
+
         res.json({
             _id: user._id,
             name: user.name,
@@ -91,7 +96,7 @@ const loginUser = async (req, res) => {
             token: generateToken(user._id)
         });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message }); 
+        res.status(500).json({ message: "Server error", error: error.message });
     }
 };
 
@@ -107,6 +112,9 @@ const googleLogin = async (req, res) => {
         let user = await User.findOne({ email });
 
         if (user) {
+
+            user.isOnline = true;
+            await user.save();
             // User exists - Log them in
             res.json({
                 _id: user._id,
@@ -114,7 +122,9 @@ const googleLogin = async (req, res) => {
                 email: user.email,
                 role: user.role,
                 profileImageUrl: user.profileImageUrl,
+                isOnline: true,
                 token: generateToken(user._id)
+
             });
         } else {
             // User DOES NOT exist - Create new user
@@ -174,7 +184,7 @@ const updateUserProfile = async (req, res) => {
             return res.status(404).json({ message: "User not found" });
         }
 
-        user.name = req.body.name || user.name; 
+        user.name = req.body.name || user.name;
         user.email = req.body.email || user.email;
 
         if (req.body.password) {
@@ -197,5 +207,19 @@ const updateUserProfile = async (req, res) => {
     }
 };
 
-// Don't forget to export googleLogin!
-module.exports = { registerUser, loginUser, googleLogin, getUserProfile, updateUserProfile };
+// /**
+//  * @desc    Logout user
+//  * @route   POST /api/auth/logout
+//  */
+const logoutUser = async (req, res) => {
+    try {
+        // We assume middleware adds req.user.id
+        await User.findByIdAndUpdate(req.user.id, { isOnline: false });
+        
+        res.status(200).json({ message: "Logged out successfully" });
+    } catch (error) {
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+};
+
+module.exports = { registerUser, loginUser, googleLogin, getUserProfile, updateUserProfile, logoutUser };

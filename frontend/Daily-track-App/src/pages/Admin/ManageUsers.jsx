@@ -13,8 +13,7 @@ const ManageUsers = () => {
   // --- Fetch All Users ---
   const getAllUsers = async () => {
     try {
-      // FIX: Changed from API_PATHS.AUTH to API_PATHS.USERS based on your apiPaths.js file
-      const response = await axiosInstance.get(API_PATHS.USERS.GET_ALL_USERS); //
+      const response = await axiosInstance.get(API_PATHS.USERS.GET_ALL_USERS);
       
       if (response.data) {
         setUsers(response.data);
@@ -27,6 +26,28 @@ const ManageUsers = () => {
     }
   };
 
+  // --- NEW: Delete User Logic ---
+  const handleDeleteUser = async (userId) => {
+    // 1. Confirm before deleting
+    if (!window.confirm("Are you sure you want to remove this user? This action cannot be undone.")) {
+        return;
+    }
+
+    try {
+        // 2. Call API (Ensure DELETE_USER is defined in your apiPaths.js)
+        // Assuming your API path is something like /api/users/:id
+        await axiosInstance.delete(`${API_PATHS.USERS.DELETE_USER}/${userId}`);
+        
+        // 3. Update UI immediately (Optimistic update)
+        setUsers((prevUsers) => prevUsers.filter((user) => user._id !== userId));
+        
+        toast.success("User removed successfully");
+    } catch (error) {
+        console.error("Error deleting user:", error);
+        toast.error("Failed to remove user. Please try again.");
+    }
+  };
+
   // --- Download Report Logic ---
   const handleDownloadReport = async () => {
     try {
@@ -34,7 +55,6 @@ const ManageUsers = () => {
             responseType: "blob",
         });
 
-        // Create a URL for the blob
         const url = window.URL.createObjectURL(new Blob([response.data]));
         const link = document.createElement("a");
         link.href = url;
@@ -42,18 +62,16 @@ const ManageUsers = () => {
         document.body.appendChild(link);
         link.click();
         
-        // Cleanup
         link.parentNode.removeChild(link);
         window.URL.revokeObjectURL(url);
 
         toast.success("Report downloaded successfully");
     } catch (error) {
         console.error("Error downloading expense details:", error);
-        toast.error("Failed to download expense details. Please try again.");
+        toast.error("Failed to download expense details.");
     }
   };
 
-  // --- Initial Fetch ---
   useEffect(() => {
     getAllUsers();
     return () => {}; 
@@ -81,7 +99,6 @@ const ManageUsers = () => {
 
         {/* --- Content Grid --- */}
         {loading ? (
-           // Loading State
            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="h-48 bg-white/5 rounded-2xl animate-pulse"></div>
@@ -90,11 +107,14 @@ const ManageUsers = () => {
         ) : users.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {users.map((user) => (
-              <UserCard key={user._id} userInfo={user} />
+              <UserCard 
+                key={user._id} 
+                userInfo={user} 
+                onDelete={() => handleDeleteUser(user._id)} 
+              />
             ))}
           </div>
         ) : (
-          // Empty State
           <div className="flex flex-col items-center justify-center py-20 opacity-50">
              <div className="text-6xl mb-4 grayscale">👥</div>
              <p className="text-gray-400 text-lg">No team members found.</p>

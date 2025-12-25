@@ -12,8 +12,14 @@ const UserSchema = new mongoose.Schema(
     role: { type: String, enum: ["admin", "member"], default: "member" }, 
     
     // OPTIONAL: Add a field to track if they are a Google user
-    googleId: { type: String, default: null }
+    googleId: { type: String, default: null },
+
+    isOnline: { 
+        type: Boolean, 
+        default: false 
+    },
   },
+
   { timestamps: true }
 );
 

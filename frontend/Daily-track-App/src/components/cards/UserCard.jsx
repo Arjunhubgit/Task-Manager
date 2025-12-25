@@ -1,25 +1,21 @@
 import React from 'react';
+import { LuTrash2 } from 'react-icons/lu';
 
 // --- Sub-Component: StatCard ---
-// Displays a single stat with a specific color theme based on the status
 const StatCard = ({ label, count, status }) => {
-  
   const getStatusColor = () => {
     switch (status) {
       case "In Progress":
-        // Cyan/Blue for progress
         return "text-cyan-400 bg-cyan-500/10 border-cyan-500/20";
       case "Completed":
-        // Emerald/Green for success
         return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
       default:
-        // Orange for Pending (aligns with your main brand color)
         return "text-orange-400 bg-orange-500/10 border-orange-500/20";
     }
   };
 
   return (
-    <div 
+    <div
       className={`
         flex-1 flex flex-col items-center justify-center py-3 px-2 rounded-xl border transition-all duration-300
         hover:scale-105 hover:bg-opacity-20 cursor-default
@@ -33,20 +29,23 @@ const StatCard = ({ label, count, status }) => {
 };
 
 // --- Main Component: UserCard ---
-const UserCard = ({ userInfo }) => {
+// We destructure 'onDelete' from props here
+const UserCard = ({ userInfo, onDelete }) => {
+
+  const isOnline = userInfo?.isOnline;
   return (
-    <div 
+    <div
       className="
-        group flex flex-col p-5 bg-[#1a1a1a]/60 backdrop-blur-xl border border-white/5 rounded-2xl 
+        relative group flex flex-col p-5 bg-[#1a1a1a]/60 backdrop-blur-xl border border-white/5 rounded-2xl 
         shadow-lg transition-all duration-300
         hover:border-[#EA8D23]/50 hover:shadow-[0_0_20px_rgba(234,141,35,0.1)]
       "
     >
-      
+
       {/* --- Top Section: Profile Info --- */}
       <div className="flex items-start justify-between mb-5">
         <div className="flex items-center gap-4">
-          
+
           {/* Avatar with Neon Glow */}
           <div className="relative w-12 h-12 flex-shrink-0">
             <div className="absolute inset-0 bg-orange-500 rounded-full blur-md opacity-20 group-hover:opacity-50 transition-opacity duration-300"></div>
@@ -56,30 +55,60 @@ const UserCard = ({ userInfo }) => {
               className="w-full h-full rounded-full object-cover border border-white/10 relative z-10"
             />
           </div>
+           <div
+              className={`
+    absolute top-2 right-10 z-20 rounded-full border-2 border-[#1a1a1a]
+    px-2 py-0.5 text-[10px] font-bold text-white tracking-wide shadow-sm
+    ${isOnline
+                  ? " bg-emerald-500/10 border-emerald-500/20 text-emerald-400  font-semibold"
+
+                  : " bg-gray-500/10 text-gray-400 border-gray-500/20"
+
+                }
+  `}
+            >
+              {isOnline ? "Online" : "Offline"}
+            </div>
+
 
           {/* User Name & Email */}
           <div className="overflow-hidden">
             <h3 className="text-sm font-bold text-gray-100 truncate group-hover:text-[#EA8D23] transition-colors duration-300">
               {userInfo?.name || "Unknown User"}
             </h3>
-            <p className="text-xs text-gray-500 truncate max-w-[140px]" title={userInfo?.email}>
+            <p className="text-xs text-gray-500 truncate max-w-[180px]" title={userInfo?.email}>
               {userInfo?.email || "No email provided"}
             </p>
           </div>
         </div>
 
         {/* Role Badge */}
-        <span 
-          className={`
+        <span
+          className={` absolute top-18
             text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded border
-            ${userInfo?.role === 'admin' 
-              ? 'text-[#EA8D23] bg-orange-500/10 border-orange-500/20' 
+            ${userInfo?.role === 'admin'
+              ? 'text-[#EA8D23] bg-orange-500/10 border-orange-500/20'
               : 'text-gray-400 bg-white/5 border-white/10'
             }
           `}
         >
           {userInfo?.role || "Member"}
         </span>
+
+        {/* Delete Button */}
+        <button
+          onClick={onDelete}
+          className="
+          absolute top-1 right-1 p-2 z-20
+          text-gray-500 bg-black/50 backdrop-blur-sm border border-white/5
+          hover:text-red-500 hover:bg-red-500/10 hover:border-red-500/20
+          rounded-lg transition-all duration-300 
+          opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0
+        "
+          title="Delete User"
+        >
+          <LuTrash2 size={18} />
+        </button>
       </div>
 
       {/* --- Divider --- */}
@@ -87,22 +116,25 @@ const UserCard = ({ userInfo }) => {
 
       {/* --- Bottom Section: Task Statistics --- */}
       <div className="flex items-center gap-3">
-        <StatCard 
-          label="Pending" 
-          count={userInfo?.pendingTasks || 0} 
-          status="Pending" 
+        <StatCard
+          label="Pending"
+          count={userInfo?.pendingTasks || 0}
+          status="Pending"
         />
-        <StatCard 
-          label="In Progress" 
-          count={userInfo?.inProgressTasks || 0} 
-          status="In Progress" 
+        <StatCard
+          label="In Progress"
+          count={userInfo?.inProgressTasks || 0}
+          status="In Progress"
         />
-        <StatCard 
-          label="Done" 
-          count={userInfo?.completedTasks || 0} 
-          status="Completed" 
+        <StatCard
+          label="Done"
+          count={userInfo?.completedTasks || 0}
+          status="Completed"
         />
       </div>
+
+
+
 
     </div>
   );
