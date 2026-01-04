@@ -5,6 +5,8 @@ import Logo_img2 from '../../assets/images/logo2.png';
 import SearchBar from '../navbar/SearchBar';
 import NotificationsBell from '../navbar/NotificationsBell';
 import QuickCreateButton from '../navbar/QuickCreateButton';
+import axiosInstance from '../../utils/axiosInstance';
+import { API_PATHS } from '../../utils/apiPaths';
 
 // --- Sub-Component for Logo and Brand ---
 const Brand = () => (
@@ -54,7 +56,7 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
     const isOnline = !!user && userStatus === 'online';
     
     return (
-        <nav className="flex items-center justify-between px-4 sm:px-6 py-4 bg-[#050505]/80 backdrop-blur-xl border-b border-white/10 sticky top-0 z-[100] transition-all duration-300">
+        <nav className="flex items-center justify-between px-4 sm:px-6 py-4 h-16 bg-[#050505]/80 backdrop-blur-xl border-b border-white/10 sticky top-0 z-[100] transition-all duration-300">
             
             {/* Left Section: Mobile Toggle and Brand */}
             <div className="flex items-center gap-4">
@@ -75,8 +77,10 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                 {user && (
                     <>
                         
-                        {/* Search Bar */}
-                        <SearchBar />
+                        {/* Search Bar - Hidden on mobile */}
+                        <div className="hidden lg:flex">
+                            <SearchBar />
+                        </div>
                         
                         {/* Quick Create Button */}
                         <QuickCreateButton />
@@ -91,7 +95,7 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                         {/* Profile Button */}
                         <button 
                             onClick={() => setIsProfileOpen(!isProfileOpen)}
-                            className="flex items-center gap-3 pl-2 pr-4 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 hover:border-orange-500/30 transition-all duration-300 group"
+                            className="flex items-center gap-3 pl-2 pr-4 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 hover:border-orange-500/30 transition-all duration-300 group active:scale-95 hover:shadow-lg hover:shadow-orange-500/10"
                         >
                             {/* Avatar Container */}
                             <div className="relative">
@@ -123,8 +127,8 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
 
                         {/* Dropdown Menu */}
                         <div className={`
-                            absolute right-0 top-full mt-3 w-56 bg-[#0A0A0A] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 transform transition-all duration-200 origin-top-right
-                            ${isProfileOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'}
+                            absolute right-0 top-full mt-3 w-56 bg-[#0A0A0A] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 transform transition-all duration-300 origin-top-right
+                            ${isProfileOpen ? 'opacity-100 scale-100 translate-y-0 visible' : 'opacity-0 scale-95 -translate-y-3 invisible pointer-events-none'}
                         `}>
                             {/* User Info Section */}
                             <div className="p-4 border-b border-white/5 bg-white/[0.02]">
@@ -138,7 +142,17 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                                 
                                 {/* Online */}
                                 <button
-                                    onClick={() => setUserStatus('online')}
+                                    onClick={async () => {
+                                        setUserStatus('online');
+                                        // Send status update to backend
+                                        try {
+                                            await axiosInstance.put(`${API_PATHS.USERS.UPDATE_USER(user._id)}`, {
+                                                status: 'online'
+                                            });
+                                        } catch (error) {
+                                            console.error('Failed to update status:', error);
+                                        }
+                                    }}
                                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left mb-1.5 ${
                                         userStatus === 'online'
                                             ? 'bg-emerald-500/15 text-emerald-300'
@@ -151,7 +165,17 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
 
                                 {/* Idle */}
                                 <button
-                                    onClick={() => setUserStatus('idle')}
+                                    onClick={async () => {
+                                        setUserStatus('idle');
+                                        // Send status update to backend
+                                        try {
+                                            await axiosInstance.put(`${API_PATHS.USERS.UPDATE_USER(user._id)}`, {
+                                                status: 'idle'
+                                            });
+                                        } catch (error) {
+                                            console.error('Failed to update status:', error);
+                                        }
+                                    }}
                                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left mb-1.5 ${
                                         userStatus === 'idle'
                                             ? 'bg-yellow-500/15 text-yellow-300'
@@ -164,7 +188,17 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
 
                                 {/* Do Not Disturb */}
                                 <button
-                                    onClick={() => setUserStatus('dnd')}
+                                    onClick={async () => {
+                                        setUserStatus('dnd');
+                                        // Send status update to backend
+                                        try {
+                                            await axiosInstance.put(`${API_PATHS.USERS.UPDATE_USER(user._id)}`, {
+                                                status: 'dnd'
+                                            });
+                                        } catch (error) {
+                                            console.error('Failed to update status:', error);
+                                        }
+                                    }}
                                     className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-lg transition-colors text-left mb-1.5 ${
                                         userStatus === 'dnd'
                                             ? 'bg-red-500/15 text-red-300'
@@ -180,7 +214,17 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
 
                                 {/* Invisible */}
                                 <button
-                                    onClick={() => setUserStatus('invisible')}
+                                    onClick={async () => {
+                                        setUserStatus('invisible');
+                                        // Send status update to backend
+                                        try {
+                                            await axiosInstance.put(`${API_PATHS.USERS.UPDATE_USER(user._id)}`, {
+                                                status: 'invisible'
+                                            });
+                                        } catch (error) {
+                                            console.error('Failed to update status:', error);
+                                        }
+                                    }}
                                     className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${
                                         userStatus === 'invisible'
                                             ? 'bg-gray-500/15 text-gray-300'

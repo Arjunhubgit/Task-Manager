@@ -160,3 +160,20 @@ html, body, #root {
   background-color: #050505; /* Matches your Dark Theme background */
   overflow-x: hidden; /* Prevents horizontal scrolling */
 }
+
+/* Hide scrollbars globally while maintaining scroll functionality */
+/* Firefox */
+* {
+  scrollbar-width: none;
+}
+
+/* Chrome, Safari, and Edge */
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* IE and Edge Legacy */
+html, body, #root, div, main, section, article, aside {
+  -ms-overflow-style: none;
+}

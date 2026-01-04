@@ -4,8 +4,10 @@ import DashboardLayout from '../../components/layouts/DashboardLayout';
 import axiosInstance from '../../utils/axiosInstance';
 import { API_PATHS } from '../../utils/apiPaths';
 import toast from 'react-hot-toast';
-import { LuFileSpreadsheet } from 'react-icons/lu'; 
+import { LuFileSpreadsheet, LuUserPlus } from 'react-icons/lu'; // Professional icons
 import UserCard from '../../components/cards/UserCard'; 
+import Modal from '../../components/Modal'; // Existing Modal component
+import Input from '../../components/inputs/input'; // Existing Input component
 
 const ManageUsers = () => {
   const [users, setUsers] = useState([]);
@@ -14,43 +16,59 @@ const ManageUsers = () => {
   const [searchParams] = useSearchParams();
   const location = useLocation();
 
+  // New states for Add Member feature
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [formData, setFormData] = useState({ name: "", email: "", password: "" });
+
   // --- Fetch All Users ---
   const getAllUsers = async () => {
     try {
       const response = await axiosInstance.get(API_PATHS.USERS.GET_ALL_USERS);
       
       if (response.data) {
+        console.log("Fetched users data:", response.data); // Debug log
         setUsers(response.data);
+        setLoading(false);
       }
     } catch (error) {
       console.error("Error fetching users:", error);
       toast.error("Failed to load team members.");
-    } finally {
       setLoading(false);
     }
   };
 
-  // --- NEW: Delete User Logic ---
- const handleDeleteUser = async (userId) => {
-  if (!window.confirm("Are you sure you want to remove this user?")) return;
+  // --- Add Member Logic ---
+  const handleAddMember = async (e) => {
+    e.preventDefault();
+    try {
+      // Calls the POST /api/users endpoint
+      const response = await axiosInstance.post(API_PATHS.USERS.CREATE_USER, formData);
+      if (response.data) {
+        toast.success(response.data.message || "Member added successfully!");
+        setIsAddModalOpen(false);
+        setFormData({ name: "", email: "", password: "" }); // Reset form
+        getAllUsers(); // Refresh the team list
+      }
+    } catch (error) {
+      const msg = error.response?.data?.message || "Failed to add member.";
+      toast.error(msg);
+    }
+  };
 
-  try {
-    // 1. Call API first
-    const response = await axiosInstance.delete(`${API_PATHS.USERS.DELETE_USER}/${userId}`);
-    
-    // 2. Only if successful, remove from UI
-    setUsers((prevUsers) => prevUsers.filter((user) => user._id !== userId));
-    toast.success(response.data.message || "User removed successfully");
-    
-  } catch (error) {
-    // 3. Catch the 404 error from the backend and show the specific message
-    const msg = error.response?.data?.message || "Failed to remove user.";
-    toast.error(msg);
-    
-    // Refresh list to make sure UI is accurate
-    getAllUsers();
-  }
-};
+  // --- Delete User Logic ---
+  const handleDeleteUser = async (userId) => {
+    if (!window.confirm("Are you sure you want to remove this user?")) return;
+
+    try {
+      const response = await axiosInstance.delete(`${API_PATHS.USERS.DELETE_USER}/${userId}`);
+      setUsers((prevUsers) => prevUsers.filter((user) => user._id !== userId));
+      toast.success(response.data.message || "User removed successfully");
+    } catch (error) {
+      const msg = error.response?.data?.message || "Failed to remove user.";
+      toast.error(msg);
+      getAllUsers();
+    }
+  };
 
   // --- Download Report Logic ---
   const handleDownloadReport = async () => {
@@ -72,28 +90,33 @@ const ManageUsers = () => {
         toast.success("Report downloaded successfully");
     } catch (error) {
         console.error("Error downloading expense details:", error);
-        toast.error("Failed to download expense details.");
+        toast.error("Failed to download report.");
     }
   };
 
   useEffect(() => {
     getAllUsers();
-    return () => {}; 
   }, []);
 
-  // Add effect to handle highlighting from search
+  // Real-time polling for user status updates
+  useEffect(() => {
+    const pollInterval = setInterval(() => {
+      getAllUsers();
+    }, 3000); // Poll every 3 seconds
+
+    return () => clearInterval(pollInterval);
+  }, []);
+
   useEffect(() => {
     const highlightId = searchParams.get('highlight') || location.state?.highlightUserId;
     if (highlightId) {
       setHighlightUserId(highlightId);
-      // Auto-scroll to highlighted user after a short delay
       setTimeout(() => {
         const element = document.getElementById(`user-${highlightId}`);
         if (element) {
           element.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
       }, 100);
-      // Remove highlight after 3 seconds
       const timer = setTimeout(() => {
         setHighlightUserId(null);
       }, 3000);
@@ -112,14 +135,71 @@ const ManageUsers = () => {
                 <p className="text-sm text-gray-400 mt-1">Manage your team and view their task progress.</p>
             </div>
             
-            <button
-              onClick={handleDownloadReport}
-              className="flex items-center gap-2 text-sm font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-4 py-2.5 rounded-xl hover:bg-emerald-500/20 transition-all shadow-[0_0_10px_rgba(16,185,129,0.1)] active:scale-95"
-            >
-              <LuFileSpreadsheet className="text-lg" />
-              <span>Download Report</span>
-            </button>
+            <div className="flex items-center gap-3">
+              {/* --- New Add Member Button --- */}
+              <button
+                onClick={() => setIsAddModalOpen(true)}
+                className="flex items-center gap-2 text-sm font-medium text-blue-400 bg-blue-500/10 border border-blue-500/20 px-4 py-2.5 rounded-xl hover:bg-blue-500/20 transition-all active:scale-95 shadow-[0_0_10px_rgba(59,130,246,0.1)]"
+              >
+                <LuUserPlus className="text-lg" />
+                <span>Add Member</span>
+              </button>
+
+              <button
+                onClick={handleDownloadReport}
+                className="flex items-center gap-2 text-sm font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-4 py-2.5 rounded-xl hover:bg-emerald-500/20 transition-all shadow-[0_0_10px_rgba(16,185,129,0.1)] active:scale-95"
+              >
+                <LuFileSpreadsheet className="text-lg" />
+                <span>Download Report</span>
+              </button>
+            </div>
         </div>
+
+        {/* --- Add Member Modal --- */}
+        <Modal 
+          isOpen={isAddModalOpen} 
+          onClose={() => setIsAddModalOpen(false)} 
+          title="Add New Team Member"
+        >
+          <form onSubmit={handleAddMember} className="space-y-4">
+            <Input 
+              label="Full Name"
+              placeholder="Enter user's full name"
+              value={formData.name}
+              onChange={(e) => setFormData({...formData, name: e.target.value})}
+            />
+            <Input 
+              label="Email Address"
+              type="email"
+              placeholder="user@example.com"
+              value={formData.email}
+              onChange={(e) => setFormData({...formData, email: e.target.value})}
+            />
+            <Input 
+              label="Temporary Password"
+              type="password"
+              placeholder="••••••••"
+              value={formData.password}
+              onChange={(e) => setFormData({...formData, password: e.target.value})}
+            />
+            
+            <div className="flex justify-end gap-3 mt-6">
+              <button 
+                type="button" 
+                onClick={() => setIsAddModalOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit"
+                className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold rounded-lg transition-all active:scale-95"
+              >
+                Create Account
+              </button>
+            </div>
+          </form>
+        </Modal>
 
         {/* --- Content Grid --- */}
         {loading ? (

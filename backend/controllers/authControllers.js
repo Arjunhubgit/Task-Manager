@@ -214,7 +214,10 @@ const updateUserProfile = async (req, res) => {
 const logoutUser = async (req, res) => {
     try {
         // We assume middleware adds req.user.id
-        await User.findByIdAndUpdate(req.user.id, { isOnline: false });
+        await User.findByIdAndUpdate(req.user.id, { 
+            isOnline: false,
+            lastLogoutTime: new Date()
+        });
         
         res.status(200).json({ message: "Logged out successfully" });
     } catch (error) {

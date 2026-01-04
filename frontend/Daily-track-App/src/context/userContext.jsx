@@ -74,6 +74,13 @@ const UserProvider = ({ children }) => {
     };
 
     const clearUser = () => {
+        // Call logout endpoint to record logout time
+        if (localStorage.getItem("token")) {
+            axiosInstance.post(API_PATHS.AUTH.LOGOUT).catch(err => {
+                console.error('Logout API call failed:', err);
+            });
+        }
+        
         setUser(null);
         localStorage.removeItem("token");
         localStorage.removeItem("role");

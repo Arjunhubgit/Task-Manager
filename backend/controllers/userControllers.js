@@ -2,6 +2,53 @@ const Task = require("../models/Task");
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 
+
+// @desc    Create a new member (Admin only)
+// @route   POST /api/users/
+// @access  Private (Admin)
+const createMember = async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    // 1. Validation
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "Please provide name, email, and password." });
+    }
+
+    // 2. Check if user already exists
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+      return res.status(400).json({ message: "User with this email already exists." });
+    }
+
+    // 3. Hash the default password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // 4. Create the member
+    const user = await User.create({
+      name,
+      email,
+      password: hashedPassword,
+      role: "member", // Hardcoded as member for security
+    });
+
+    if (user) {
+      res.status(201).json({
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        message: "Member added successfully!",
+      });
+    } else {
+      res.status(400).json({ message: "Invalid user data" });
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
 // @desc    Get all users (Admin only)
 // @route   GET /api/users/
 // @access  Private (Admin)
@@ -9,7 +56,7 @@ const getUsers = async (req, res) => {
   try {
     const users = await User.find({role: 'member'}).select("-password");
 
-    // Add task counts to each user
+    // Add task counts to each user and check for logout timeout
     const usersWithTaskCounts = await Promise.all(
       users.map(async (user) => {
         const pendingTasks = await Task.countDocuments({
@@ -24,8 +71,23 @@ const getUsers = async (req, res) => {
           assignedTo: user._id,
           status: "Completed",
         });
+
+        // Check if user logged out more than 5 minutes ago and auto-set status to invisible
+        let userStatus = user.status;
+        if (user.lastLogoutTime) {
+          const now = new Date();
+          const timeSinceLogout = (now - new Date(user.lastLogoutTime)) / 1000 / 60; // Convert to minutes
+          
+          // If logged out more than 5 minutes ago and status is not already invisible, set it to invisible
+          if (timeSinceLogout > 5 && user.status !== 'invisible') {
+            await User.findByIdAndUpdate(user._id, { status: 'invisible' });
+            userStatus = 'invisible';
+          }
+        }
+
         return {
           ...user._doc, // Include all existing user data
+          status: userStatus,
           pendingTasks,
           inProgressTasks,
           completedTasks,
@@ -81,6 +143,45 @@ const deleteUser = async (req, res) => {
   }
 };
 
+// @desc    Update user status or other fields
+// @route   PUT /api/users/:id
+// @access  Private
+const updateUser = async (req, res) => {
+  try {
+    const { status } = req.body;
+    
+    // Validate status if provided
+    if (status && !['online', 'idle', 'dnd', 'invisible'].includes(status)) {
+      return res.status(400).json({ message: "Invalid status value" });
+    }
+
+    // Find and update user
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { 
+        ...(status && { status })
+      },
+      { new: true } // Return updated document
+    ).select("-password");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({ 
+      success: true, 
+      message: "User updated successfully",
+      user 
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      message: "Server error during update", 
+      error: error.message 
+    });
+  }
+};
+
 // Make sure to add it to your exports!
-module.exports = { getUsers, getUserById, deleteUser };
+module.exports = { getUsers, getUserById, deleteUser, createMember, updateUser };
 

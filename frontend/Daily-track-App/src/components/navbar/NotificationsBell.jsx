@@ -73,12 +73,12 @@ const NotificationsBell = () => {
             {/* Notification Bell Button */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="relative p-2 rounded-lg text-gray-400 hover:text-gray-300 hover:bg-white/5 transition-colors"
+                className="relative p-2 rounded-lg text-gray-400 hover:text-gray-300 hover:bg-white/5 transition-all duration-300 active:scale-95"
                 aria-label="Notifications"
             >
-                <Bell className="w-5 h-5" />
+                <Bell className={`w-5 h-5 transition-transform duration-300 ${isOpen ? 'scale-110 text-orange-500' : ''}`} />
                 {unreadCount > 0 && (
-                    <div className="absolute top-0 right-0 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-lg shadow-red-500/50">
+                    <div className="absolute top-0 right-0 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-lg shadow-red-500/50 animate-pulse">
                         {unreadCount > 9 ? '9+' : unreadCount}
                     </div>
                 )}
@@ -86,7 +86,7 @@ const NotificationsBell = () => {
 
             {/* Notifications Dropdown */}
             {isOpen && (
-                <div className="absolute right-0 top-full mt-3 w-96 bg-[#0A0A0A] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50">
+                <div className="absolute right-0 top-full mt-3 w-70 sm:w-96 bg-[#0A0A0A] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 max-h-[85vh] sm:max-h-[90vh] transform transition-all duration-300 origin-top-right animate-in fade-in slide-in-from-top-2">
                     {/* Header */}
                     <div className="p-4 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
                         <h3 className="font-semibold text-white text-sm">Notifications</h3>
@@ -101,7 +101,7 @@ const NotificationsBell = () => {
                     </div>
 
                     {/* Notifications List */}
-                    <div className="max-h-96 overflow-y-auto custom-scrollbar">
+                    <div className="max-h-72 sm:max-h-96 overflow-y-auto custom-scrollbar">
                         {notifications.length === 0 ? (
                             <div className="p-8 text-center">
                                 <Bell className="w-8 h-8 text-gray-700 mx-auto mb-2" />

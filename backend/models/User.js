@@ -18,6 +18,25 @@ const UserSchema = new mongoose.Schema(
         type: Boolean, 
         default: false 
     },
+
+    // User activity status: online, idle, dnd (do not disturb), invisible
+    status: {
+        type: String,
+        enum: ['online', 'idle', 'dnd', 'invisible'],
+        default: 'offline'
+    },
+
+    // Track last logout time to auto-set status to invisible after 5 mins
+    lastLogoutTime: {
+        type: Date,
+        default: null
+    },
+
+    // Track last activity time for timeout logic
+    lastActivityTime: {
+        type: Date,
+        default: () => new Date()
+    },
   },
 
   { timestamps: true }

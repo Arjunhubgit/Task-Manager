@@ -32,7 +32,26 @@ const StatCard = ({ label, count, status }) => {
 // We destructure 'onDelete' from props here
 const UserCard = ({ userInfo, onDelete }) => {
 
-  const isOnline = userInfo?.isOnline;
+  const userStatus = userInfo?.status || 'offline';
+  
+  // Map status to color styles
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'online':
+        return { bg: 'bg-emerald-500', shadow: 'shadow-emerald-500/50', ring: 'ring-emerald-500/30' };
+      case 'idle':
+        return { bg: 'bg-yellow-500', shadow: 'shadow-yellow-500/50', ring: 'ring-yellow-500/30' };
+      case 'dnd':
+        return { bg: 'bg-red-500', shadow: 'shadow-red-500/50', ring: 'ring-red-500/30' };
+      case 'invisible':
+        return { bg: 'bg-gray-500', shadow: 'shadow-gray-500/50', ring: 'ring-gray-500/30' };
+      default:
+        return { bg: 'bg-gray-600', shadow: 'shadow-gray-600/50', ring: 'ring-gray-600/30' };
+    }
+  };
+
+  const statusColor = getStatusColor(userStatus);
+
   return (
     <div
       className="
@@ -46,7 +65,7 @@ const UserCard = ({ userInfo, onDelete }) => {
       <div className="flex items-start justify-between mb-5">
         <div className="flex items-center gap-4">
 
-          {/* Avatar with Neon Glow */}
+          {/* Avatar with Status Indicator */}
           <div className="relative w-12 h-12 flex-shrink-0">
             <div className="absolute inset-0 bg-orange-500 rounded-full blur-md opacity-20 group-hover:opacity-50 transition-opacity duration-300"></div>
             <img
@@ -54,22 +73,9 @@ const UserCard = ({ userInfo, onDelete }) => {
               alt={`${userInfo?.name || "User"}'s avatar`}
               className="w-full h-full rounded-full object-cover border border-white/10 relative z-10"
             />
+            {/* Status Indicator Dot */}
+            <div className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-[#1a1a1a] z-20 ${statusColor.bg} shadow-lg ${statusColor.shadow}`}></div>
           </div>
-           <div
-              className={`
-    absolute top-2 right-10 z-20 rounded-full border-2 border-[#1a1a1a]
-    px-2 py-0.5 text-[10px] font-bold text-white tracking-wide shadow-sm
-    ${isOnline
-                  ? " bg-emerald-500/10 border-emerald-500/20 text-emerald-400  font-semibold"
-
-                  : " bg-gray-500/10 text-gray-400 border-gray-500/20"
-
-                }
-  `}
-            >
-              {isOnline ? "Online" : "Offline"}
-            </div>
-
 
           {/* User Name & Email */}
           <div className="overflow-hidden">
