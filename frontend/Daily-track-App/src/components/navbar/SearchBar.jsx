@@ -1,37 +1,100 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, ArrowRight, Zap, FileText, Users, X } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Search, ArrowRight, Zap, FileText, Users, X, Loader } from 'lucide-react';
+import axiosInstance from '../../utils/axiosInstance';
+import { useNavigate } from 'react-router-dom';
 
-const SearchBar = () => {
+const   SearchBar = () => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [searchResults, setSearchResults] = useState({ tasks: [], users: [] });
     const searchRef = useRef(null);
     const inputRef = useRef(null);
+    const navigate = useNavigate();
+    const searchTimeoutRef = useRef(null);
 
-    // Mock search results data
-    const mockResults = {
-        tasks: [
-            { id: 1, title: 'Complete project proposal', icon: FileText },
-            { id: 2, title: 'Review design mockups', icon: FileText },
-            { id: 3, title: 'Update documentation', icon: FileText },
-        ],
-        team: [
-            { id: 1, name: 'Arjun Sharma', role: 'Admin' },
-            { id: 2, name: 'Sarah Johnson', role: 'Developer' },
-            { id: 3, name: 'Mike Chen', role: 'Designer' },
-        ],
+    // Fetch search results from API
+    const performSearch = useCallback(async (term) => {
+        if (!term.trim()) {
+            setSearchResults({ tasks: [], users: [] });
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            // Fetch tasks and users in parallel
+            const [tasksResponse, usersResponse] = await Promise.all([
+                axiosInstance.get('/api/tasks').catch(err => {
+                    console.error('Tasks fetch error:', err);
+                    return { data: { tasks: [] } };
+                }),
+                axiosInstance.get('/api/users').catch(err => {
+                    console.error('Users fetch error:', err);
+                    return { data: [] };
+                })
+            ]);
+
+            const tasks = tasksResponse.data.tasks || tasksResponse.data || [];
+            // Handle both array response and object with users property
+            const users = Array.isArray(usersResponse.data) ? usersResponse.data : (usersResponse.data.users || []);
+
+            // Filter results based on search term
+            const filteredTasks = tasks.filter(task =>
+                task.title.toLowerCase().includes(term.toLowerCase()) ||
+                (task.description && task.description.toLowerCase().includes(term.toLowerCase()))
+            );
+
+            const filteredUsers = users.filter(user =>
+                user.name.toLowerCase().includes(term.toLowerCase()) ||
+                (user.email && user.email.toLowerCase().includes(term.toLowerCase()))
+            );
+
+            setSearchResults({
+                tasks: filteredTasks.slice(0, 5), // Limit to 5 results
+                users: filteredUsers.slice(0, 5)  // Limit to 5 results
+            });
+        } catch (error) {
+            console.error('Search error:', error);
+            setSearchResults({ tasks: [], users: [] });
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    // Debounced search
+    const handleSearchChange = (e) => {
+        const term = e.target.value;
+        setSearchTerm(term);
+
+        // Clear previous timeout
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+
+        // Set new timeout for debounced search
+        setIsLoading(term.length > 0);
+        searchTimeoutRef.current = setTimeout(() => {
+            performSearch(term);
+        }, 300);
     };
 
-    // Filter results based on search term
-    const filteredResults = {
-        tasks: mockResults.tasks.filter(task =>
-            task.title.toLowerCase().includes(searchTerm.toLowerCase())
-        ),
-        team: mockResults.team.filter(member =>
-            member.name.toLowerCase().includes(searchTerm.toLowerCase())
-        ),
+    const hasResults = searchResults.tasks.length > 0 || searchResults.users.length > 0;
+
+    // Handle result selection
+    const handleTaskClick = (taskId) => {
+        navigate(`/admin/tasks?highlight=${taskId}`, { state: { highlightTaskId: taskId } });
+        setIsOpen(false);
+        setSearchTerm('');
+        setSearchResults({ tasks: [], users: [] });
     };
 
-    const hasResults = filteredResults.tasks.length > 0 || filteredResults.team.length > 0;
+    const handleUserClick = (userId) => {
+        // Navigate to user details page
+        navigate(`/admin/users?highlight=${userId}`, { state: { highlightUserId: userId } });
+        setIsOpen(false);
+        setSearchTerm('');
+        setSearchResults({ tasks: [], users: [] });
+    };
 
     // Keyboard shortcuts
     useEffect(() => {
@@ -46,11 +109,15 @@ const SearchBar = () => {
             if (e.key === 'Escape') {
                 setIsOpen(false);
                 setSearchTerm('');
+                setSearchResults({ tasks: [], users: [] });
             }
         };
 
         document.addEventListener('keydown', handleKeyDown);
-        return () => document.removeEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+            if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+        };
     }, []);
 
     // Close when clicking outside
@@ -100,7 +167,7 @@ const SearchBar = () => {
                                     type="text"
                                     placeholder="Search tasks, team members..."
                                     value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    onChange={handleSearchChange}
                                     className="flex-1 bg-transparent outline-none text-white placeholder-gray-500 text-sm"
                                 />
                                 {searchTerm && (
@@ -116,57 +183,68 @@ const SearchBar = () => {
 
                         {/* Search Results */}
                         <div className="max-h-96 overflow-y-auto custom-scrollbar">
-                            {searchTerm === '' ? (
+                            {isLoading && (
+                                <div className="p-6 text-center flex items-center justify-center gap-2">
+                                    <Loader className="w-4 h-4 text-orange-500 animate-spin" />
+                                    <p className="text-sm text-gray-400">Searching...</p>
+                                </div>
+                            )}
+                            {!isLoading && searchTerm === '' ? (
                                 <div className="p-6 text-center">
                                     <Zap className="w-8 h-8 text-orange-500/30 mx-auto mb-2" />
                                     <p className="text-sm text-gray-400">Start typing to search...</p>
                                 </div>
-                            ) : hasResults ? (
+                            ) : !isLoading && hasResults ? (
                                 <>
                                     {/* Tasks Results */}
-                                    {filteredResults.tasks.length > 0 && (
+                                    {searchResults.tasks.length > 0 && (
                                         <div className="p-2">
                                             <p className="text-xs text-gray-500 px-3 py-2 font-semibold uppercase tracking-wide">Tasks</p>
-                                            {filteredResults.tasks.map(task => (
+                                            {searchResults.tasks.map(task => (
                                                 <button
-                                                    key={task.id}
+                                                    key={task._id}
+                                                    onClick={() => handleTaskClick(task._id)}
                                                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition-colors text-left group"
                                                 >
                                                     <FileText className="w-4 h-4 text-orange-500 flex-shrink-0" />
-                                                    <div className="flex-1">
-                                                        <p className="text-sm text-gray-200 group-hover:text-white">{task.title}</p>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm text-gray-200 group-hover:text-white truncate">{task.title}</p>
+                                                        {task.description && (
+                                                            <p className="text-xs text-gray-500 truncate">{task.description}</p>
+                                                        )}
                                                     </div>
-                                                    <ArrowRight className="w-4 h-4 text-gray-600 group-hover:text-orange-500 transition-colors" />
+                                                    <ArrowRight className="w-4 h-4 text-gray-600 group-hover:text-orange-500 transition-colors flex-shrink-0" />
                                                 </button>
                                             ))}
                                         </div>
                                     )}
 
-                                    {/* Team Results */}
-                                    {filteredResults.team.length > 0 && (
+                                    {/* Users Results */}
+                                    {searchResults.users.length > 0 && (
                                         <div className="p-2 border-t border-white/5">
                                             <p className="text-xs text-gray-500 px-3 py-2 font-semibold uppercase tracking-wide">Team</p>
-                                            {filteredResults.team.map(member => (
+                                            {searchResults.users.map(user => (
                                                 <button
-                                                    key={member.id}
+                                                    key={user._id}
+                                                    onClick={() => handleUserClick(user._id)}
                                                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition-colors text-left group"
                                                 >
                                                     <Users className="w-4 h-4 text-cyan-500 flex-shrink-0" />
-                                                    <div className="flex-1">
-                                                        <p className="text-sm text-gray-200 group-hover:text-white">{member.name}</p>
-                                                        <p className="text-xs text-gray-500">{member.role}</p>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm text-gray-200 group-hover:text-white truncate">{user.name}</p>
+                                                        <p className="text-xs text-gray-500 truncate">{user.role || user.email}</p>
                                                     </div>
-                                                    <ArrowRight className="w-4 h-4 text-gray-600 group-hover:text-cyan-500 transition-colors" />
+                                                    <ArrowRight className="w-4 h-4 text-gray-600 group-hover:text-cyan-500 transition-colors flex-shrink-0" />
                                                 </button>
                                             ))}
                                         </div>
                                     )}
                                 </>
-                            ) : (
+                            ) : !isLoading && searchTerm !== '' ? (
                                 <div className="p-6 text-center">
                                     <p className="text-sm text-gray-500">No results found for "{searchTerm}"</p>
                                 </div>
-                            )}
+                            ) : null}
                         </div>
 
                         {/* Footer */}

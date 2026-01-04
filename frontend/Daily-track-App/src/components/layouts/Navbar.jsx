@@ -50,8 +50,9 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    const isOnline = !!user; // Determine online status
-
+    // Determine online status: user must be logged in AND status must be 'online'
+    const isOnline = !!user && userStatus === 'online';
+    
     return (
         <nav className="flex items-center justify-between px-4 sm:px-6 py-4 bg-[#050505]/80 backdrop-blur-xl border-b border-white/10 sticky top-0 z-[100] transition-all duration-300">
             
@@ -67,41 +68,19 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                 <Brand />
             </div>
             
-            {/* Center Section: Desktop Navigation Links and Search */}
-            <div className="hidden lg:flex items-center gap-8">
-                <div className="flex items-center gap-8">
-                    {DESKTOP_LINKS.map(link => (
-                        <a 
-                            key={link.label}
-                            href={link.href} 
-                            className={`
-                                relative text-sm font-medium tracking-wide transition-all duration-300 px-2 py-1
-                                ${activeMenu === link.label 
-                                    ? "text-[#EA8D23]" 
-                                    : "text-gray-400 hover:text-white"
-                                }
-                            `}
-                        >
-                            {link.label}
-                            
-                            {activeMenu === link.label && (
-                                <span className="absolute bottom-[-1.25rem] left-0 w-full h-[2px] bg-[#EA8D23] shadow-[0_0_10px_#EA8D23]"></span>
-                            )}
-                        </a>
-                    ))}
-                </div>
-                
-                {/* Search Bar */}
-                <SearchBar />
-            </div>
+
 
             {/* Right Section: Quick Create, Notifications, and User Profile */}
             <div className="flex items-center gap-3" ref={profileRef}>
                 {user && (
                     <>
+                        
+                        {/* Search Bar */}
+                        <SearchBar />
+                        
                         {/* Quick Create Button */}
                         <QuickCreateButton />
-                        
+
                         {/* Notifications Bell */}
                         <NotificationsBell />
                     </>
@@ -139,12 +118,6 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                                 `} />
                             </div>
 
-                            {/* User Info (Desktop only) */}
-                            <div className="text-left hidden md:block">
-                                <p className="text-sm font-semibold text-gray-200 leading-none group-hover:text-white transition-colors">{user.name}</p>
-                                <p className="text-[10px] text-gray-400 mt-1 capitalize leading-none">{user.role || 'Member'}</p>
-                            </div>
-                            
                             <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform duration-300 ${isProfileOpen ? 'rotate-180' : ''}`} />
                         </button>
 

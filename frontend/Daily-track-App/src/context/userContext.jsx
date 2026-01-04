@@ -48,10 +48,9 @@ const UserProvider = ({ children }) => {
                 const response = await axiosInstance.get(
                     API_PATHS.NOTIFICATIONS.GET_USER_NOTIFICATIONS(user._id)
                 );
-                if (response.data.success) {
-                    setNotifications(response.data.data);
-                    console.log('✅ Notifications fetched from backend:', response.data.data);
-                }
+                // if (response.data.success) {
+                //     setNotifications(response.data.data);
+                // }
             } catch (error) {
                 console.error("Failed to fetch notifications:", error);
             }

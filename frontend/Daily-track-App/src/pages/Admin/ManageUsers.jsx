@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams, useLocation } from 'react-router-dom';
 import DashboardLayout from '../../components/layouts/DashboardLayout';
 import axiosInstance from '../../utils/axiosInstance';
 import { API_PATHS } from '../../utils/apiPaths';
@@ -9,6 +10,9 @@ import UserCard from '../../components/cards/UserCard';
 const ManageUsers = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [highlightUserId, setHighlightUserId] = useState(null);
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
 
   // --- Fetch All Users ---
   const getAllUsers = async () => {
@@ -27,26 +31,26 @@ const ManageUsers = () => {
   };
 
   // --- NEW: Delete User Logic ---
-  const handleDeleteUser = async (userId) => {
-    // 1. Confirm before deleting
-    if (!window.confirm("Are you sure you want to remove this user? This action cannot be undone.")) {
-        return;
-    }
+ const handleDeleteUser = async (userId) => {
+  if (!window.confirm("Are you sure you want to remove this user?")) return;
 
-    try {
-        // 2. Call API (Ensure DELETE_USER is defined in your apiPaths.js)
-        // Assuming your API path is something like /api/users/:id
-        await axiosInstance.delete(`${API_PATHS.USERS.DELETE_USER}/${userId}`);
-        
-        // 3. Update UI immediately (Optimistic update)
-        setUsers((prevUsers) => prevUsers.filter((user) => user._id !== userId));
-        
-        toast.success("User removed successfully");
-    } catch (error) {
-        console.error("Error deleting user:", error);
-        toast.error("Failed to remove user. Please try again.");
-    }
-  };
+  try {
+    // 1. Call API first
+    const response = await axiosInstance.delete(`${API_PATHS.USERS.DELETE_USER}/${userId}`);
+    
+    // 2. Only if successful, remove from UI
+    setUsers((prevUsers) => prevUsers.filter((user) => user._id !== userId));
+    toast.success(response.data.message || "User removed successfully");
+    
+  } catch (error) {
+    // 3. Catch the 404 error from the backend and show the specific message
+    const msg = error.response?.data?.message || "Failed to remove user.";
+    toast.error(msg);
+    
+    // Refresh list to make sure UI is accurate
+    getAllUsers();
+  }
+};
 
   // --- Download Report Logic ---
   const handleDownloadReport = async () => {
@@ -76,6 +80,26 @@ const ManageUsers = () => {
     getAllUsers();
     return () => {}; 
   }, []);
+
+  // Add effect to handle highlighting from search
+  useEffect(() => {
+    const highlightId = searchParams.get('highlight') || location.state?.highlightUserId;
+    if (highlightId) {
+      setHighlightUserId(highlightId);
+      // Auto-scroll to highlighted user after a short delay
+      setTimeout(() => {
+        const element = document.getElementById(`user-${highlightId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
+      // Remove highlight after 3 seconds
+      const timer = setTimeout(() => {
+        setHighlightUserId(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams, location]);
 
   return (
     <DashboardLayout activeMenu="Team Members">
@@ -107,11 +131,20 @@ const ManageUsers = () => {
         ) : users.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {users.map((user) => (
-              <UserCard 
-                key={user._id} 
-                userInfo={user} 
-                onDelete={() => handleDeleteUser(user._id)} 
-              />
+              <div
+                key={user._id}
+                id={`user-${user._id}`}
+                className={`transition-all duration-500 ${
+                  highlightUserId === user._id
+                    ? 'ring-2 ring-cyan-500 shadow-lg shadow-cyan-500/50 animate-pulse'
+                    : ''
+                }`}
+              >
+                <UserCard 
+                  userInfo={user} 
+                  onDelete={() => handleDeleteUser(user._id)} 
+                />
+              </div>
             ))}
           </div>
         ) : (

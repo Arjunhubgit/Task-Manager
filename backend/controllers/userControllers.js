@@ -58,17 +58,29 @@ const getUserById = async (req, res) => {
 // @route   DELETE /api/users/:id
 // @access  Private (Admin)
 
+const deleteUser = async (req, res) => {
+  try {
+    // Attempt to delete
+    const user = await User.findByIdAndDelete(req.params.id);
 
-// const deleteUser = async (req, res) => {
-//   try {
-//     const user = await User.findByIdAndDelete(req.params.id);
-//     if (!user) {
-//       return res.status(404).json({ message: "User not found" });
-//     }
-//     res.json({ message: "User deleted successfully" });
-//   } catch (error) {
-//     res.status(500).json({ message: "Server error", error: error.message });
-//   }
-// };
+    // Check if the user was actually found and deleted
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "User not found. They may have already been removed." 
+      });
+    }
 
-module.exports = { getUsers, getUserById};
+    res.json({ success: true, message: "User deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      message: "Server error during deletion", 
+      error: error.message 
+    });
+  }
+};
+
+// Make sure to add it to your exports!
+module.exports = { getUsers, getUserById, deleteUser };
+
