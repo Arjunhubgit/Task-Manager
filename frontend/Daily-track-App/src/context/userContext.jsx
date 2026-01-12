@@ -1,14 +1,12 @@
 import React, { createContext, useState, useEffect } from "react";
 import axiosInstance from "../utils/axiosInstance";
 import { API_PATHS } from "../utils/apiPaths";
-// import { set } from "mongoose";
-
 
 export const UserContext = createContext();
 
 const UserProvider = ({ children }) => {
     const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true); // New state to track loading
+    const [loading, setLoading] = useState(true); 
     const [notifications, setNotifications] = useState([]); // Notifications state
 
     useEffect(() => {
@@ -27,7 +25,6 @@ const UserProvider = ({ children }) => {
             } catch (error) {
                 console.error("Failed to fetch user profile:", error);
                 clearUser();
-                // Handle error, e.g., by clearing token and redirecting to login
                 localStorage.removeItem("token");
                 localStorage.removeItem("role");
                 setUser(null);
@@ -39,7 +36,7 @@ const UserProvider = ({ children }) => {
         fetchUser();
     }, [user]);
 
-    // Fetch notifications from backend when user changes
+    // --- FIXED: Fetch and Poll Notifications ---
     useEffect(() => {
         if (!user || !user._id) return;
 
@@ -48,17 +45,18 @@ const UserProvider = ({ children }) => {
                 const response = await axiosInstance.get(
                     API_PATHS.NOTIFICATIONS.GET_USER_NOTIFICATIONS(user._id)
                 );
-                // if (response.data.success) {
-                //     setNotifications(response.data.data);
-                // }
+                // Backend returns { success: true, data: [...] }
+                if (response.data && response.data.success) {
+                    setNotifications(response.data.data);
+                }
             } catch (error) {
                 console.error("Failed to fetch notifications:", error);
             }
         };
 
-        fetchNotifications();
+        fetchNotifications(); // Initial fetch
 
-        // Optionally: Set up polling to check for new notifications every 10 seconds
+        // Setup polling to check for new notifications every 10 seconds
         const pollInterval = setInterval(fetchNotifications, 10000);
 
         return () => clearInterval(pollInterval);
@@ -73,67 +71,54 @@ const UserProvider = ({ children }) => {
         setLoading(false);
     };
 
-    const clearUser = () => {
-        // Call logout endpoint to record logout time
+    const clearUser = async () => {
+    try {
+        // 1. Call the logout API first to update the DB status to 'invisible'
         if (localStorage.getItem("token")) {
-            axiosInstance.post(API_PATHS.AUTH.LOGOUT).catch(err => {
-                console.error('Logout API call failed:', err);
-            });
+            await axiosInstance.post(API_PATHS.AUTH.LOGOUT);
         }
-        
+    } catch (err) {
+        console.error('Logout API call failed:', err);
+    } finally {
+        // 2. Clear local data regardless of API success
         setUser(null);
         localStorage.removeItem("token");
         localStorage.removeItem("role");
-        setLoading(false); // Set loading to false when clearing user
+        setLoading(false);
     }
-
-    // Add notification function (for local use, real notifications come from backend)
-    const addNotification = (notification) => {
-        const newNotification = {
-            id: Date.now(),
-            read: false,
-            timestamp: 'just now',
-            createdAt: new Date(),
-            ...notification,
-        };
-        setNotifications(prev => [newNotification, ...prev]);
-    };
-
-    // Mark notification as read
-    const markNotificationAsRead = (id) => {
+}
+    // Mark notification as read (Optimistic UI update)
+    const markNotificationAsRead = async (id) => {
         setNotifications(prev =>
-            prev.map(n => n._id === id || n.id === id ? { ...n, read: true } : n)
+            prev.map(n => n._id === id ? { ...n, read: true } : n)
         );
         
-        // Call backend to update
         try {
-            axiosInstance.put(API_PATHS.NOTIFICATIONS.MARK_AS_READ(id));
+            await axiosInstance.put(API_PATHS.NOTIFICATIONS.MARK_AS_READ(id));
         } catch (error) {
             console.error("Error marking notification as read:", error);
         }
     };
 
     // Delete notification
-    const deleteNotification = (id) => {
-        setNotifications(prev => prev.filter(n => n._id !== id && n.id !== id));
+    const deleteNotification = async (id) => {
+        setNotifications(prev => prev.filter(n => n._id !== id));
         
-        // Call backend to delete
         try {
-            axiosInstance.delete(API_PATHS.NOTIFICATIONS.DELETE_NOTIFICATION(id));
+            await axiosInstance.delete(API_PATHS.NOTIFICATIONS.DELETE_NOTIFICATION(id));
         } catch (error) {
             console.error("Error deleting notification:", error);
         }
     };
 
     // Mark all as read
-    const markAllNotificationsAsRead = () => {
+    const markAllNotificationsAsRead = async () => {
         if (!user || !user._id) return;
         
         setNotifications(prev => prev.map(n => ({ ...n, read: true })));
         
-        // Call backend to mark all as read
         try {
-            axiosInstance.put(API_PATHS.NOTIFICATIONS.MARK_ALL_AS_READ(user._id));
+            await axiosInstance.put(API_PATHS.NOTIFICATIONS.MARK_ALL_AS_READ(user._id));
         } catch (error) {
             console.error("Error marking all notifications as read:", error);
         }
@@ -146,7 +131,6 @@ const UserProvider = ({ children }) => {
             loading, 
             clearUser,
             notifications,
-            addNotification,
             markNotificationAsRead,
             deleteNotification,
             markAllNotificationsAsRead

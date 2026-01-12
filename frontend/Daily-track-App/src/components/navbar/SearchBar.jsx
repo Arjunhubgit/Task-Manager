@@ -134,86 +134,92 @@ const   SearchBar = () => {
 
     return (
         <div className="relative" ref={searchRef}>
-            {/* Search Trigger Button */}
+            {/* Search Trigger Button - Desktop */}
             <button
                 onClick={() => setIsOpen(true)}
-                className="hidden md:flex items-center gap-3 px-4 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 hover:border-orange-500/30 transition-all duration-200 group min-w-[280px]"
+                className="hidden md:flex items-center gap-3 px-4 py-2.5 rounded-xl bg-gradient-to-r from-white/8 to-white/5 border border-white/15 hover:from-white/12 hover:to-white/10 hover:border-orange-500/50 shadow-lg shadow-black/20 hover:shadow-orange-500/10 transition-all duration-300 group min-w-[300px] active:scale-95"
             >
-                <Search className="w-4 h-4 text-gray-500 group-hover:text-gray-400 transition-colors" />
-                <span className="text-sm text-gray-400 group-hover:text-gray-300 flex-1 text-left">Search tasks, people...</span>
-                <kbd className="hidden sm:flex items-center gap-1 px-2 py-1 rounded bg-white/5 border border-white/10 text-xs text-gray-500">
-                    <span>⌘</span><span>K</span>
+                <Search className="w-5 h-5 text-orange-400 group-hover:text-orange-300 transition-colors flex-shrink-0" />
+                <span className="text-sm text-gray-300 group-hover:text-gray-100 flex-1 text-left font-medium">Search tasks & team...</span>
+                <kbd className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/8 border border-white/15 text-xs text-gray-400 group-hover:bg-orange-500/10 group-hover:border-orange-500/30 transition-all duration-200">
+                    <span className="font-semibold">⌘</span><span>K</span>
                 </kbd>
             </button>
 
             {/* Mobile Search Button */}
             <button
                 onClick={() => setIsOpen(true)}
-                className="md:hidden p-2 rounded-lg text-gray-400 hover:text-gray-300 hover:bg-white/5 transition-colors"
+                className="md:hidden p-2.5 rounded-lg text-gray-400 hover:text-orange-400 hover:bg-white/5 transition-all duration-200 active:scale-95"
             >
                 <Search className="w-5 h-5" />
             </button>
 
             {/* Search Modal/Dropdown */}
             {isOpen && (
-                <div className="absolute top-full mt-3 left-1/2 -translate-x-1/2 w-full max-w-2xl z-50">
-                    <div className="bg-[#0A0A0A] border border-white/10 rounded-xl shadow-2xl overflow-hidden">
+                <div className="absolute top-full mt-4 left-1/2 -translate-x-1/2 w-full max-w-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="bg-gradient-to-b from-[#0F0F0F] to-[#0A0A0A] border border-white/15 rounded-2xl shadow-2xl shadow-black/60 overflow-hidden backdrop-blur-xl">
                         {/* Search Input */}
-                        <div className="p-4 border-b border-white/5 bg-white/[0.02]">
-                            <div className="relative flex items-center gap-3">
-                                <Search className="w-5 h-5 text-orange-500 flex-shrink-0" />
+                        <div className="p-4 border-b border-white/10 bg-white/[0.02]">
+                            <div className="relative flex items-center gap-3 bg-white/5 px-4 py-3 rounded-xl border border-white/10 focus-within:border-orange-500/50 focus-within:bg-white/8 transition-all duration-200">
+                                <Search className="w-5 h-5 text-orange-400 flex-shrink-0" />
                                 <input
                                     ref={inputRef}
                                     type="text"
                                     placeholder="Search tasks, team members..."
                                     value={searchTerm}
                                     onChange={handleSearchChange}
-                                    className="flex-1 bg-transparent outline-none text-white placeholder-gray-500 text-sm"
+                                    className="flex-1 bg-transparent outline-none text-white placeholder-gray-500 text-sm font-medium"
+                                    autoComplete="off"
                                 />
                                 {searchTerm && (
                                     <button
                                         onClick={() => setSearchTerm('')}
-                                        className="p-1 hover:bg-white/10 rounded-lg transition-colors"
+                                        className="p-1.5 hover:bg-white/10 rounded-lg transition-all duration-200 active:scale-90"
                                     >
-                                        <X className="w-4 h-4 text-gray-400" />
+                                        <X className="w-4 h-4 text-gray-400 hover:text-gray-200" />
                                     </button>
                                 )}
                             </div>
                         </div>
 
                         {/* Search Results */}
-                        <div className="max-h-96 overflow-y-auto custom-scrollbar">
+                        <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
                             {isLoading && (
-                                <div className="p-6 text-center flex items-center justify-center gap-2">
-                                    <Loader className="w-4 h-4 text-orange-500 animate-spin" />
-                                    <p className="text-sm text-gray-400">Searching...</p>
+                                <div className="p-8 text-center flex flex-col items-center justify-center gap-3">
+                                    <Loader className="w-5 h-5 text-orange-400 animate-spin" />
+                                    <p className="text-sm text-gray-400 font-medium">Searching...</p>
                                 </div>
                             )}
                             {!isLoading && searchTerm === '' ? (
-                                <div className="p-6 text-center">
-                                    <Zap className="w-8 h-8 text-orange-500/30 mx-auto mb-2" />
-                                    <p className="text-sm text-gray-400">Start typing to search...</p>
+                                <div className="p-8 text-center">
+                                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500/20 to-orange-600/10 flex items-center justify-center mx-auto mb-3">
+                                        <Zap className="w-6 h-6 text-orange-400" />
+                                    </div>
+                                    <p className="text-sm text-gray-400 font-medium">Start typing to search tasks & team members</p>
+                                    <p className="text-xs text-gray-600 mt-2">Try searching by task name or team member name</p>
                                 </div>
                             ) : !isLoading && hasResults ? (
                                 <>
                                     {/* Tasks Results */}
                                     {searchResults.tasks.length > 0 && (
-                                        <div className="p-2">
-                                            <p className="text-xs text-gray-500 px-3 py-2 font-semibold uppercase tracking-wide">Tasks</p>
-                                            {searchResults.tasks.map(task => (
+                                        <div className="p-3 border-b border-white/5">
+                                            <p className="text-xs text-gray-500 px-3 py-2 font-bold uppercase tracking-wider">📋 Tasks</p>
+                                            {searchResults.tasks.map((task, index) => (
                                                 <button
                                                     key={task._id}
                                                     onClick={() => handleTaskClick(task._id)}
-                                                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition-colors text-left group"
+                                                    className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-white/8 transition-all duration-200 text-left group ${index !== searchResults.tasks.length - 1 ? 'border-b border-white/5' : ''}`}
                                                 >
-                                                    <FileText className="w-4 h-4 text-orange-500 flex-shrink-0" />
+                                                    <div className="p-1.5 bg-orange-500/15 rounded-lg group-hover:bg-orange-500/25 transition-colors flex-shrink-0">
+                                                        <FileText className="w-4 h-4 text-orange-400" />
+                                                    </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="text-sm text-gray-200 group-hover:text-white truncate">{task.title}</p>
+                                                        <p className="text-sm text-gray-100 group-hover:text-white truncate font-semibold">{task.title}</p>
                                                         {task.description && (
-                                                            <p className="text-xs text-gray-500 truncate">{task.description}</p>
+                                                            <p className="text-xs text-gray-500 truncate mt-1">{task.description}</p>
                                                         )}
                                                     </div>
-                                                    <ArrowRight className="w-4 h-4 text-gray-600 group-hover:text-orange-500 transition-colors flex-shrink-0" />
+                                                    <ArrowRight className="w-4 h-4 text-gray-600 group-hover:text-orange-400 transition-all duration-200 flex-shrink-0 transform group-hover:translate-x-1" />
                                                 </button>
                                             ))}
                                         </div>
@@ -221,39 +227,48 @@ const   SearchBar = () => {
 
                                     {/* Users Results */}
                                     {searchResults.users.length > 0 && (
-                                        <div className="p-2 border-t border-white/5">
-                                            <p className="text-xs text-gray-500 px-3 py-2 font-semibold uppercase tracking-wide">Team</p>
-                                            {searchResults.users.map(user => (
+                                        <div className="p-3">
+                                            <p className="text-xs text-gray-500 px-3 py-2 font-bold uppercase tracking-wider">👥 Team</p>
+                                            {searchResults.users.map((user, index) => (
                                                 <button
                                                     key={user._id}
                                                     onClick={() => handleUserClick(user._id)}
-                                                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition-colors text-left group"
+                                                    className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-white/8 transition-all duration-200 text-left group ${index !== searchResults.users.length - 1 ? 'border-b border-white/5' : ''}`}
                                                 >
-                                                    <Users className="w-4 h-4 text-cyan-500 flex-shrink-0" />
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-sm text-gray-200 group-hover:text-white truncate">{user.name}</p>
-                                                        <p className="text-xs text-gray-500 truncate">{user.role || user.email}</p>
+                                                    <div className="p-1.5 bg-cyan-500/15 rounded-lg group-hover:bg-cyan-500/25 transition-colors flex-shrink-0">
+                                                        <Users className="w-4 h-4 text-cyan-400" />
                                                     </div>
-                                                    <ArrowRight className="w-4 h-4 text-gray-600 group-hover:text-cyan-500 transition-colors flex-shrink-0" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm text-gray-100 group-hover:text-white truncate font-semibold">{user.name}</p>
+                                                        <p className="text-xs text-gray-500 truncate mt-1">{user.role || user.email}</p>
+                                                    </div>
+                                                    <ArrowRight className="w-4 h-4 text-gray-600 group-hover:text-cyan-400 transition-all duration-200 flex-shrink-0 transform group-hover:translate-x-1" />
                                                 </button>
                                             ))}
                                         </div>
                                     )}
                                 </>
                             ) : !isLoading && searchTerm !== '' ? (
-                                <div className="p-6 text-center">
-                                    <p className="text-sm text-gray-500">No results found for "{searchTerm}"</p>
+                                <div className="p-8 text-center">
+                                    <div className="w-12 h-12 rounded-xl bg-gray-800/30 flex items-center justify-center mx-auto mb-3">
+                                        <Search className="w-6 h-6 text-gray-600" />
+                                    </div>
+                                    <p className="text-sm text-gray-400 font-medium">No results found</p>
+                                    <p className="text-xs text-gray-600 mt-2">Try a different search term</p>
                                 </div>
                             ) : null}
                         </div>
 
                         {/* Footer */}
-                        <div className="p-3 border-t border-white/5 bg-white/[0.02] flex items-center justify-between text-xs text-gray-500">
-                            <span>Press ESC to close</span>
-                            <div className="flex gap-2">
-                                <kbd className="px-2 py-1 rounded bg-white/5 border border-white/10">Enter</kbd>
-                                <span>to select</span>
-                            </div>
+                        <div className="p-3 border-t border-white/10 bg-white/[0.03] flex items-center justify-between text-xs text-gray-500 font-medium">
+                            <span className="flex items-center gap-2">
+                                <kbd className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-gray-400">ESC</kbd>
+                                <span>to close</span>
+                            </span>
+                            <span className="flex items-center gap-2">
+                                <span>Select</span>
+                                <kbd className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-gray-400">Enter</kbd>
+                            </span>
                         </div>
                     </div>
                 </div>

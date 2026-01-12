@@ -2,7 +2,7 @@
 
 import { useContext } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
-import { UserContext } from '../context/UserContext'; // Import your UserContext
+import { UserContext } from '../context/userContext'; // Import your UserContext
 
 const PrivateRoute = ({ allowedRoles }) => {
   // Use useContext to get the user and loading state

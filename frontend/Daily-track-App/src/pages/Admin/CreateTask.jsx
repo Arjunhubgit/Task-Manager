@@ -97,7 +97,7 @@ const CreateTask = () => {
       );
 
       toast.success("Task Updated Successfully");
-      navigate('/admin/manage-tasks');
+      navigate('/admin/tasks');
     } catch (error) {
       console.error("Error updating task:", error);
       toast.error("Error updating task.");
@@ -112,7 +112,7 @@ const CreateTask = () => {
       await axiosInstance.delete(API_PATHS.TASKS.DELETE_TASK(taskId));
       toast.success("Task Deleted Successfully");
       setOpenDeleteAlert(false);
-      navigate('/admin/manage-tasks');
+      navigate('/admin/tasks');
     } catch (error) {
       console.error("Error deleting task:", error);
       toast.error("Error deleting task.");

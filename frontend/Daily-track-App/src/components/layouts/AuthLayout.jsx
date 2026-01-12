@@ -1,6 +1,6 @@
 import { FaTasks } from 'react-icons/fa';
-import UI_IMG from '../../assets/images/robot-img.png';
-import Logo_img from '../../assets/images/logo.png';
+import Logo_img from '../../assets/images/logo1.png';
+import Logo_img2 from '../../assets/images/logo2.png';
 
 const AuthLayout = ({ children }) => {
     return (
@@ -36,7 +36,7 @@ const AuthLayout = ({ children }) => {
                             <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-50 pointer-events-none" />
                             
                             <img 
-                                src={UI_IMG} 
+                                src={Logo_img2} 
                                 alt="Auth Visual" 
                                 className="w-full h-full object-cover opacity-90 transition-transform duration-700 group-hover:scale-105" 
                             />

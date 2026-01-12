@@ -1,4 +1,4 @@
-import { LuLayoutDashboard, LuUsers, LuClipboardCheck, LuSquarePlus, LuLogOut } from "react-icons/lu";
+import { LuActivity, LuLayoutDashboard, LuUsers, LuClipboardCheck, LuSquarePlus, LuLogOut, LuShield } from "react-icons/lu";
 
 export const SIDE_MENU_DATA = [
   {
@@ -39,6 +39,33 @@ export const SIDE_MENU_USER_DATA = [
     label: "My Tasks",
     icon: LuClipboardCheck,
     path: "/user/tasks",
+  },
+];
+
+export const SIDE_MENU_HOST_DATA = [
+  {
+    id: "01",
+    label: "Host Dashboard",
+    icon: LuLayoutDashboard,
+    path: "/host/dashboard",
+  },
+  {
+    id: "02",
+    label: "Global Users",
+    icon: LuUsers,
+    path: "/host/users",
+  },
+  {
+    id: "03",
+    label: "Global Tasks",
+    icon: LuClipboardCheck,
+    path: "/host/tasks",
+  },
+  {
+    id: "04",
+    label: "God Mode",
+    icon: LuShield,
+    path: "/host/god-mode",
   },
 ];
 

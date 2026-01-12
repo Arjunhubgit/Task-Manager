@@ -1,53 +1,47 @@
 import React, { useState, useContext, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import ProfilePhotoSelector from '../../components/inputs/ProfilePhotoSelector';
-import { FaRocket, FaGoogle, FaCheckCircle, FaEye, FaEyeSlash } from 'react-icons/fa';
+import { 
+  FaRocket, FaEye, FaEyeSlash, FaLink, FaCheck, 
+  FaUser, FaEnvelope, FaLock, FaShieldAlt, FaBolt, FaCheckCircle, FaCloud 
+} from 'react-icons/fa';
 import { validateEmail } from '../../utils/helper';
 import axiosInstance from '../../utils/axiosInstance';
 import { API_PATHS } from '../../utils/apiPaths';
 import { UserContext } from '../../context/userContext';
 import uploadImage from '../../utils/uploadimage';
-import imgage from "../../assets/svg/google-color.svg";
+import googleIcon from "../../assets/svg/google-color.svg";
 import logo from "../../assets/images/logo1.png";
 
-// --- 1. ADDED: Firebase Imports ---
+// Firebase Imports
 import { signInWithPopup } from "firebase/auth";
 import { auth, googleProvider } from "../../utils/firebase"; 
 
-// --- Internal Component for Typing Animation ---
 const TypingText = ({ words }) => {
-  const [currentWordIndex, setCurrentWordIndex] = useState(0);
-  const [currentText, setCurrentText] = useState('');
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [typingSpeed, setTypingSpeed] = useState(150);
+  const [index, setIndex] = useState(0);
+  const [subIndex, setSubIndex] = useState(0);
+  const [reverse, setReverse] = useState(false);
 
   useEffect(() => {
-    const handleTyping = () => {
-      const fullWord = words[currentWordIndex];
-      
-      if (isDeleting) {
-        setCurrentText(fullWord.substring(0, currentText.length - 1));
-        setTypingSpeed(50); 
-      } else {
-        setCurrentText(fullWord.substring(0, currentText.length + 1));
-        setTypingSpeed(150); 
-      }
-
-      if (!isDeleting && currentText === fullWord) {
-        setTimeout(() => setIsDeleting(true), 1500); 
-      } else if (isDeleting && currentText === '') {
-        setIsDeleting(false);
-        setCurrentWordIndex((prev) => (prev + 1) % words.length);
-      }
-    };
-
-    const timer = setTimeout(handleTyping, typingSpeed);
-    return () => clearTimeout(timer);
-  }, [currentText, isDeleting, words, currentWordIndex, typingSpeed]);
+    if (subIndex === words[index].length + 1 && !reverse) {
+      setTimeout(() => setReverse(true), 2000);
+      return;
+    }
+    if (subIndex === 0 && reverse) {
+      setReverse(false);
+      setIndex((prev) => (prev + 1) % words.length);
+      return;
+    }
+    const timeout = setTimeout(() => {
+      setSubIndex((prev) => prev + (reverse ? -1 : 1));
+    }, reverse ? 75 : 150);
+    return () => clearTimeout(timeout);
+  }, [subIndex, index, reverse, words]);
 
   return (
-    <span className="text-orange-500 font-bold border-r-4 border-orange-500 pr-1 animate-pulse">
-      {currentText}
+    <span className="text-[#E88916]">
+      {words[index].substring(0, subIndex)}
+      <span className="animate-pulse ml-1">|</span>
     </span>
   );
 };
@@ -58,183 +52,216 @@ const SignUp = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [adminInviteToken, setAdminInviteToken] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+  const [inviteValidation, setInviteValidation] = useState({ status: null, message: '' });
+  const [isValidatingInvite, setIsValidatingInvite] = useState(false);
   const [error, setError] = useState(null);
-
+  
+  const [searchParams] = useSearchParams();
   const { updateUser } = useContext(UserContext);
   const navigate = useNavigate();
 
-  // --- 2. ADDED: Google Sign-In Handler ---
+  useEffect(() => {
+    const inviteFromURL = searchParams.get('invite');
+    if (inviteFromURL) {
+      setInviteCode(inviteFromURL);
+      validateInviteCode(inviteFromURL);
+    }
+  }, [searchParams]);
+
+  const validateInviteCode = async (code) => {
+    if (!code.trim()) {
+      setInviteValidation({ status: null, message: '' });
+      return;
+    }
+    setIsValidatingInvite(true);
+    try {
+      const response = await axiosInstance.get(`/api/invites/verify/${code}`);
+      if (response.data.success) {
+        setInviteValidation({ status: 'valid', message: `Invite from ${response.data.data.adminName}` });
+      }
+    } catch (err) {
+      setInviteValidation({ status: 'invalid', message: 'Invalid invite code' });
+    } finally { setIsValidatingInvite(false); }
+  };
+
   const handleGoogleSignIn = async () => {
-  try {
-    // 1. Authenticate with Firebase Popup
-    const result = await signInWithPopup(auth, googleProvider);
-    const user = result.user;
-    
-    // 2. Send Google Data + THE ADMIN TOKEN to backend
-    const response = await axiosInstance.post(API_PATHS.AUTH.GOOGLE_LOGIN, {
-      name: user.displayName,
-      email: user.email,
-      googlePhotoUrl: user.photoURL,
-      adminInviteToken: adminInviteToken // <--- CRITICAL ADDITION
-    });
-
-    updateUser(response.data);
-    const { role } = response.data;
-    
-    // 3. Redirect based on role
-    if (role === 'admin') navigate('/admin/dashboard');
-    else navigate('/user/dashboard');
-
-  } catch (err) {
-    console.error("Google Sign In Error:", err);
-    setError("Google Sign In failed. Please try again.");
-  }
-};
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const response = await axiosInstance.post(API_PATHS.AUTH.GOOGLE_LOGIN, {
+        name: result.user.displayName,
+        email: result.user.email,
+        googlePhotoUrl: result.user.photoURL,
+        inviteCode: inviteCode || undefined
+      });
+      updateUser(response.data);
+      navigate(response.data.role === 'admin' ? '/admin/dashboard' : '/user/dashboard');
+    } catch (err) { setError("Google Sign In failed."); }
+  };
 
   const handleSignUp = async (e) => {
     e.preventDefault();
-    let profileImageUrl = "";
-    if (!fullName) { setError("Please enter your full name."); return; }
-    if (!validateEmail(email)) { setError("Please enter a valid email address."); return; }
-    if (!profilePic) { setError("Please upload a profile picture."); return; }
-    if (!password || password.length < 8) { setError("Password must be at least 8 characters long."); return; }
-    setError(null);
-
-    try {
-      if (profilePic) {
-        const imgUploadRes = await uploadImage(profilePic);
-        profileImageUrl = imgUploadRes.imageUrl || "";
-      }
-
-      const response = await axiosInstance.post(API_PATHS.AUTH.REGISTER, {
-        name: fullName,
-        email,
-        password,
-        profileImageUrl,
-        adminInviteToken
-      });
-
-      updateUser(response.data);
-
-      const { role } = response.data;
-      if (role === 'admin') navigate('/admin/dashboard');
-      else navigate('/user/dashboard');
-
-    } catch (err) {
-      if (err.response && err.response.data.message) setError(err.response.data.message);
-      else setError("Something went wrong. Please try again.");
+    if (!fullName || !validateEmail(email) || !profilePic || password.length < 8) {
+      setError("Please fill all fields (Password min 8 chars).");
+      return;
     }
+    setError(null);
+    try {
+      const imgUploadRes = await uploadImage(profilePic);
+      const response = await axiosInstance.post(API_PATHS.AUTH.REGISTER, {
+        name: fullName, email, password, profileImageUrl: imgUploadRes.imageUrl, inviteCode: inviteCode || undefined
+      });
+      updateUser(response.data);
+      navigate(response.data.role === 'admin' ? '/admin/dashboard' : '/user/dashboard');
+    } catch (err) { setError(err.response?.data?.message || "Registration failed."); }
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] flex items-center justify-center p-4 relative overflow-hidden">
-      <div className="absolute top-[-10%] right-[-5%] w-[600px] h-[600px] bg-orange-600/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] left-[-10%] w-[600px] h-[600px] bg-purple-900/10 rounded-full blur-[120px] pointer-events-none" />
+    <div className="h-screen w-screen bg-[#050505] flex items-center justify-center p-4 md:p-8 overflow-hidden relative">
+      {/* Ambient Background Glows */}
+      <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-[#E88916]/5 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-purple-900/5 rounded-full blur-[120px] pointer-events-none" />
 
-      <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-12 items-center relative z-10">
+      <div className="w-full max-w-6xl h-full max-h-[850px] bg-[#121212] rounded-[32px] border border-white/5 shadow-2xl flex flex-col md:flex-row overflow-hidden z-10">
         
-        {/* Left Side: Animated Text */}
-        <div className="hidden lg:flex flex-col justify-center space-y-8 pl-8">
-            <div className="space-y-4">
+        {/* LEFT SIDE: BRANDING/MARKETING */}
+        <div className="hidden md:flex w-[45%] bg-[#1A1A1A] p-12 flex-col items-center justify-center relative h-full">
+          <div className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
+            <div className="w-[85%] h-[85%] border border-white/10 rounded-full" />
+            <div className="absolute w-[65%] h-[65%] border border-white/10 rounded-full" />
+            <div className="absolute w-[45%] h-[45%] border border-white/10 rounded-full" />
+          </div>
           
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 w-fit">
-                    <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span>
-                    <span className="text-orange-500 text-xs font-bold tracking-wider uppercase">AI-Powered Task Management</span>
-                </div>
-                
-                <h1 className="text-5xl font-extrabold text-white leading-tight">
-                    Manage your <br />
-                    <TypingText words={["Projects.", "Workflow.", "Team.", "Deadlines."]} />
-                </h1>
-                
-                <p className="text-gray-400 text-lg max-w-md leading-relaxed">
-                    Streamline your daily tasks with our intelligent system. 
-                    Join thousands of professionals delivering high-impact work.
-                </p>
+          <div className="z-10 text-center">
+            <div className="w-14 h-14 bg-[#252525] rounded-2xl flex items-center justify-center mb-6 mx-auto border border-white/5 shadow-inner">
+              <FaShieldAlt className="text-[#E88916] text-2xl" />
             </div>
+            
+            <h2 className="text-4xl font-bold text-white mb-4 leading-tight">
+              Optimized for <br />
+              <TypingText words={["Performance", "Efficiency", "Teamwork"]} />
+            </h2>
+            
+            <p className="text-gray-400 max-w-xs mx-auto mb-10 text-sm leading-relaxed">
+              Experience the next generation of task management with AI-driven insights and real-time collaboration.
+            </p>
 
-            <div className="space-y-4 pt-4">
-                {["Real-time Collaboration", "Smart Task Analytics", "Automated Workflow"].map((item, index) => (
-                    <div key={index} className="flex items-center gap-3 text-gray-300">
-                        <FaCheckCircle className="text-orange-500/80" />
-                        <span className="font-medium">{item}</span>
-                    </div>
-                ))}
+            <div className="grid grid-cols-2 gap-3">
+              <Tag icon={<FaShieldAlt />} text="Secure" />
+              <Tag icon={<FaBolt />} text="Fast" />
+              <Tag icon={<FaCheckCircle />} text="Reliable" />
+              <Tag icon={<FaCloud />} text="Cloud" />
             </div>
+          </div>
         </div>
 
-        {/* Right Side: Signup Form */}
-        <div className="flex justify-center lg:justify-end">
-           
-            <div className="w-full scale-100 max-w-[450px] bg-black/40 backdrop-blur-xl rounded-2xl border border-white/10 p-8 shadow-2xl relative">
-                {/* Logo */}
-                <img src={logo} alt="DailyTrack Logo" className="w-80 relative left-9 mb-4" />
-                <div className="flex flex-col items-center mb-8">
-                <div className="mb-4">
-                    <FaRocket className="text-orange-500 text-3xl transform -rotate-45 drop-shadow-[0_0_15px_rgba(249,115,22,0.5)]" />
-                </div>
-                <h1 className="text-white text-3xl font-bold mb-2 tracking-tight">Create Account</h1>
-                <p className="text-gray-400 text-sm">Join the future of productivity.</p>
-                </div>
+        {/* RIGHT SIDE: FORM SECTION */}
+        <div className="w-full md:w-[55%] p-8 md:p-12 flex flex-col h-full overflow-y-auto custom-scrollbar bg-[#121212]">
+          <div className="flex items-center gap-2 mb-6 flex-shrink-0">
+            <img src={logo} alt="ChronoFlow Logo" className="h-7" />
+            <span className="text-white font-bold text-lg tracking-tight uppercase">CHRONOFLOW</span>
+          </div>
 
-                {/* --- 3. ADDED: onClick Handler --- */}
-                <button 
-                  type="button"
-                  onClick={handleGoogleSignIn} 
-                  className="w-full bg-white hover:bg-gray-100 text-gray-900 font-semibold py-3 px-4 rounded-lg flex items-center justify-center gap-3 transition-transform active:scale-[0.98] mb-6 shadow-lg"
-                >
-                  <img src={imgage} alt="Google logo" className="w-5 h-5" />
-                  <span>Sign up with Google</span>
-                </button>
+          <div className="mb-6 flex-shrink-0">
+            <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">Create Account</h1>
+            <p className="text-gray-500 text-sm">Join the workspace to manage your projects.</p>
+          </div>
 
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="h-[1px] bg-white/10 flex-1"></div>
-                  <span className="text-gray-500 text-[10px] font-bold tracking-widest uppercase">Or register with email</span>
-                  <div className="h-[1px] bg-white/10 flex-1"></div>
-                </div>
-
-                <form onSubmit={handleSignUp} className="space-y-5">
-                   <div className="flex justify-center">
-                       <ProfilePhotoSelector image={profilePic} setImage={setProfilePic} />
-                   </div>
-                   <div className="space-y-1">
-                       <label className="text-gray-400 text-xs font-semibold ml-1">Full Name</label>
-                       <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="John Doe" className="bg-white/5 border border-white/10 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 block w-full p-3 outline-none placeholder-gray-600 transition-all hover:bg-white/10" />
-                   </div>
-                   <div className="space-y-1">
-                       <label className="text-gray-400 text-xs font-semibold ml-1">Email Address</label>
-                       <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="w-full bg-white/5 border border-white/10 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 block p-3 outline-none placeholder-gray-600 transition-all hover:bg-white/10" />
-                   </div>
-                   <div className="space-y-1">
-                       <label className="text-gray-400 text-xs font-semibold ml-1">Password</label>
-                       <div className="relative">
-                           <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Create a strong password" className="bg-white/5 border border-white/10 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 block w-full p-3 pl-3 pr-10 outline-none placeholder-gray-600 transition-all hover:bg-white/10" />
-                           <button
-                             type="button"
-                             onClick={() => setShowPassword(!showPassword)}
-                             className="absolute right-3 top-3.5 text-gray-500 hover:text-gray-300 transition-colors"
-                           >
-                             {showPassword ? <FaEyeSlash /> : <FaEye />}
-                           </button>
-                       </div>
-                   </div>
-                   <div className="space-y-1">
-                       <label className="text-gray-400 text-xs font-semibold ml-1">Admin Token (Optional)</label>
-                       <input type="text" value={adminInviteToken} onChange={(e) => setAdminInviteToken(e.target.value)} placeholder="Enter invite code" className="bg-white/5 border border-white/10 text-gray-200 text-sm rounded-lg focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 block w-full p-3 outline-none placeholder-gray-600 transition-all hover:bg-white/10" />
-                   </div>
-                   <div className="flex items-start gap-3 mt-2 px-1">
-                       <input type="checkbox" id="terms" className="mt-1 w-4 h-4 rounded border-gray-600 bg-black/40 text-orange-500 focus:ring-orange-500/20" />
-                       <label htmlFor="terms" className="text-xs text-gray-400 leading-relaxed">I agree to the <a href="#" className="text-gray-300 hover:text-white underline">Terms</a> and <a href="#" className="text-gray-300 hover:text-white underline">Privacy Policy</a>.</label>
-                   </div>
-                   {error && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center">{error}</div>}
-                   <button type="submit" className="w-full bg-[#EA8D23] hover:bg-[#d67e1b] text-white font-bold py-3 px-4 rounded-lg transition-all duration-200 shadow-[0_0_20px_rgba(234,141,35,0.3)] mt-2 hover:shadow-[0_0_25px_rgba(234,141,35,0.5)] active:scale-[0.98]">Create Account</button>
-                </form>
-                <div className="mt-8 text-center"><p className="text-gray-500 text-sm">Already have an account? <Link to="/login" className="text-[#EA8D23] hover:text-[#FF9F38] font-semibold transition-colors">Log in</Link></p></div>
+          <form onSubmit={handleSignUp} className="space-y-4 flex-grow">
+            <div className="flex justify-center mb-2">
+              <ProfilePhotoSelector image={profilePic} setImage={setProfilePic} />
             </div>
+
+            <div className="grid grid-cols-1 gap-4">
+              <InputBox icon={<FaUser />} label="FULL NAME">
+                <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="John Doe" className="input-style" />
+              </InputBox>
+
+              <InputBox icon={<FaEnvelope />} label="EMAIL">
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" className="input-style" />
+              </InputBox>
+
+              <InputBox icon={<FaLock />} label="PASSWORD">
+                <div className="relative">
+                  <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="input-style pr-10" />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors">
+                    {showPassword ? <FaEyeSlash /> : <FaEye />}
+                  </button>
+                </div>
+              </InputBox>
+
+              <InputBox icon={<FaLink />} label="INVITE CODE (OPTIONAL)">
+                <input type="text" value={inviteCode} onChange={(e) => {setInviteCode(e.target.value); validateInviteCode(e.target.value);}} placeholder="Paste invite code" className="input-style" />
+                {isValidatingInvite && <span className="text-[10px] text-blue-400 mt-1 block">Validating...</span>}
+                {inviteValidation.status === 'valid' && <span className="text-[10px] text-green-500 flex items-center gap-1 mt-1"><FaCheck /> {inviteValidation.message}</span>}
+              </InputBox>
+            </div>
+
+            {error && <p className="text-red-400 text-xs bg-red-400/5 p-3 rounded-lg border border-red-400/10 text-center mt-2">{error}</p>}
+
+            <button type="submit" className="w-full bg-gradient-to-r from-[#E88916] to-[#C96C00] hover:brightness-110 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-[#E88916]/20 active:scale-[0.99] flex items-center justify-center gap-2 mt-2">
+              Sign Up <FaRocket className="text-sm" />
+            </button>
+          </form>
+
+          <div className="relative my-6 flex-shrink-0">
+            <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-white/5"></span></div>
+            <div className="relative flex justify-center text-[10px] uppercase tracking-widest font-bold text-gray-500"><span className="bg-[#121212] px-3">Or continue with</span></div>
+          </div>
+
+          <button onClick={handleGoogleSignIn} type="button" className="w-full bg-white hover:bg-gray-100 text-black font-bold py-3 rounded-xl flex items-center justify-center gap-3 transition-all active:scale-[0.99] flex-shrink-0">
+            <img src={googleIcon} alt="Google" className="w-4 h-4" /> Google Account
+          </button>
+
+          <p className="text-center mt-6 text-sm text-gray-500 flex-shrink-0">
+            Already have an account? <Link to="/login" className="text-[#E88916] font-bold hover:underline ml-1">Log in</Link>
+          </p>
         </div>
       </div>
+
+      <style jsx="true">{`
+        .input-style {
+          width: 100%;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 12px;
+          padding: 12px 14px;
+          color: white;
+          font-size: 14px;
+          outline: none;
+          transition: all 0.2s;
+        }
+        .input-style:focus {
+          border-color: #E88916;
+          background: rgba(232, 137, 22, 0.02);
+          box-shadow: 0 0 0 4px rgba(232, 137, 22, 0.1);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(232, 137, 22, 0.2);
+          border-radius: 10px;
+        }
+      `}</style>
     </div>
   );
 };
+
+const InputBox = ({ icon, label, children }) => (
+  <div className="space-y-1.5">
+    <label className="text-gray-500 text-[10px] font-bold uppercase tracking-widest ml-1 flex items-center gap-2">
+      <span className="text-[#E88916] text-xs">{icon}</span> {label}
+    </label>
+    {children}
+  </div>
+);
+
+const Tag = ({ icon, text }) => (
+  <div className="flex items-center justify-center gap-2 py-2.5 px-4 bg-white/5 border border-white/10 rounded-xl text-gray-300 text-xs font-semibold cursor-default">
+    <span className="text-[#E88916]">{icon}</span>
+    {text}
+  </div>
+);
+
 export default SignUp;

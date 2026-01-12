@@ -1,74 +1,82 @@
+
+
 import React, { useContext } from 'react';
-import {
-  BrowserRouter as Router, Route, Routes, Navigate
-} from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
+
+// Context
+import UserProvider, { UserContext } from '../src/context/userContext.jsx';
+
+// Components
+import PrivateRoute from './Routes/PrivateRoute';
+
+// Auth Pages
+import Login from './pages/Auth/Login';
+import SignUp from './pages/Auth/SignUp';
+import HostLogin from './pages/Auth/HostLogin';
+
+// Admin Pages
 import Dashboard from './pages/Admin/Dashboard';
 import ManageTask from './pages/Admin/ManageTask';
 import CreateTask from './pages/Admin/CreateTask';
 import ManageUser from './pages/Admin/ManageUsers';
+import AdminMessages from './pages/Admin/AdminMessages'; // Keeping this as it was in your snippet
+
+// User Pages
 import UserDashboard from './pages/User/UserDashboard';
 import MyTasks from './pages/User/MyTasks';
 import ViewTaskDetails from './pages/User/ViewTaskDetails';
-import Login from './pages/Auth/Login';
-import SignUp from './pages/Auth/SignUp';
-import PrivateRoute from './Routes/PrivateRoute';
-import UserProvider, { UserContext } from '../src/context/userContext.jsx';
-import { Toaster } from 'react-hot-toast';
+import UserMessages from './pages/User/UserMessages'; // Keeping this as it was in your snippet
 
+// Host Pages
+import HostDashboard from './pages/Host/HostDashboard';
+import GlobalTaskManager from './pages/Host/GlobalTaskManager';
+import GlobalUsers from './pages/Host/GlobalUsers';
+import GodMode from './pages/Host/GodMode';
 
 const App = () => {
   return (
-    <UserProvider>
-      <div>
-        <Router>
-          <Routes>
-            {/* Public Routes */}
-            <Route path='login' element={<Login />} />
-            <Route path='signUp' element={<SignUp />} />
+   <UserProvider>
+      <Router>
+        <Routes>
+          {/* Public */}
+          <Route path='login' element={<Login />} />
+          <Route path='host-login' element={<HostLogin />} />
+          <Route path='signUp' element={<SignUp />} />
 
-            {/* Admin Routes (Guarded by PrivateRoute) */}
-            <Route element={<PrivateRoute allowedRoles={['admin']} />}>
-              <Route path='admin/dashboard' element={<Dashboard />} />
-              <Route path='admin/tasks' element={<ManageTask />} />
-              <Route path='admin/create-task' element={<CreateTask />} />
-              <Route path='admin/users' element={<ManageUser />} />
-            </Route>
+          {/* Admin Protected */}
+          <Route element={<PrivateRoute allowedRoles={['admin']} />}>
+            <Route path='admin/dashboard' element={<Dashboard />} />
+            {/* THIS ROUTE MUST EXIST FOR THE REDIRECT TO WORK */}
+            <Route path='admin/tasks' element={<ManageTask />} />
+            <Route path='admin/create-task' element={<CreateTask />} />
+            <Route path='admin/users' element={<ManageUser />} />
+            <Route path='admin/messages' element={<AdminMessages />} />
+          </Route>
 
-            {/* User Routes (Guarded by PrivateRoute) */}
-            <Route element={<PrivateRoute allowedRoles={['member']} />}>
-              <Route path='user/dashboard' element={<UserDashboard />} />
-              {/* IMPROVEMENT: Changed path from 'user/my-tasks' to the cleaner 'user/tasks'. 
-                This now matches the 'See All' link in UserDashboard.jsx.
-              */}
-              <Route path='user/tasks' element={<MyTasks />} /> 
-              
-              {/* IMPROVEMENT: Changed path from 'user/task-details/:id' to the cleaner
-                RESTful path 'user/tasks/:taskId'. This improves consistency.
-              */}
-              <Route path="user/tasks/:taskId" element={<ViewTaskDetails />} /> 
+          {/* User Protected */}
+          <Route element={<PrivateRoute allowedRoles={['member']} />}>
+            <Route path='user/dashboard' element={<UserDashboard />} />
+            <Route path='user/tasks' element={<MyTasks />} />
+            <Route path='user/task/:id' element={<ViewTaskDetails />} />
+            <Route path='user/messages' element={<UserMessages />} />
+          </Route>
 
-            </Route>
+          {/* Host Protected */}
+          <Route element={<PrivateRoute allowedRoles={['host']} />}>
+            <Route path='host/dashboard' element={<HostDashboard />} />
+            <Route path='host/tasks' element={<GlobalTaskManager />} />
+            <Route path='host/users' element={<GlobalUsers />} />
+            <Route path='host/god-mode' element={<GodMode />} />
+          </Route>
 
-            {/* Root/Fallback Route */}
-            <Route path='/' element={<Root />} />
-            <Route path='*' element={<NotFound />} /> {/* Added a proper catch-all route */}
-          </Routes>
-        </Router>
-      </div>
-      <Toaster 
-        toastOptions={{
-          className: '',
-          style: {
-            fontSize: '13px',
-            backkground: '#fff'
-          },
-        }}
-      />
-    </UserProvider >
+          <Route path='/' element={<Root />} />
+        </Routes>
+      </Router>
+      <Toaster />
+    </UserProvider>
   );
 }
-
-export default App;
 
 // --- Helper Components ---
 
@@ -76,7 +84,11 @@ const Root = () => {
   const { user, loading } = useContext(UserContext);
 
   if (loading) {
-    return <div>Loading user context...</div>;
+    return (
+      <div className="h-screen w-full flex items-center justify-center bg-[#050505] text-white">
+        Loading...
+      </div>
+    );
   }
 
   if (!user) {
@@ -84,14 +96,20 @@ const Root = () => {
   }
   
   // Navigate to the appropriate dashboard based on role
+  if (user.role === 'host') {
+    return <Navigate to="/host/dashboard" replace />;
+  }
   return user.role === 'admin' ? 
-    <Navigate to="/admin/dashboard" replace /> : <Navigate to="/user/dashboard" replace />;
+    <Navigate to="/admin/dashboard" replace /> : 
+    <Navigate to="/user/dashboard" replace />;
 };
 
 const NotFound = () => (
-  <div className="flex items-center justify-center h-screen bg-[#1a1a1a] text-white flex-col">
-    <h1 className="text-4xl font-bold text-[#EA8D23]">404</h1>
-    <p className="text-lg mt-2">Page Not Found</p>
+  <div className="flex items-center justify-center h-screen bg-[#050505] text-white flex-col gap-4">
+    <h1 className="text-6xl font-bold text-[#EA8D23]">404</h1>
+    <p className="text-xl text-gray-400">Page Not Found</p>
     <Navigate to="/" />
   </div>
 );
+
+export default App;

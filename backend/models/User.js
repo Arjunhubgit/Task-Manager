@@ -9,10 +9,26 @@ const UserSchema = new mongoose.Schema(
     password: { type: String, required: false }, 
     
     profileImageUrl: { type: String, default: null },
-    role: { type: String, enum: ["admin", "member"], default: "member" }, 
+    role: { type: String, enum: ["host", "admin", "member"], default: "member" }, 
     
     // OPTIONAL: Add a field to track if they are a Google user
     googleId: { type: String, default: null },
+
+    // Hierarchy relationships - establishes parent-child relationships
+    // HOST has no parent (null)
+    // ADMIN's parent is the HOST who manages them
+    parentHostId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null, // Only set for ADMIN users
+    },
+    
+    // MEMBER's parent is the ADMIN who manages them
+    parentAdminId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null, // Only set for MEMBER users
+    },
 
     isOnline: { 
         type: Boolean, 
@@ -22,7 +38,7 @@ const UserSchema = new mongoose.Schema(
     // User activity status: online, idle, dnd (do not disturb), invisible
     status: {
         type: String,
-        enum: ['online', 'idle', 'dnd', 'invisible'],
+        enum: ['online', 'idle', 'dnd','offline', 'invisible'],
         default: 'offline'
     },
 

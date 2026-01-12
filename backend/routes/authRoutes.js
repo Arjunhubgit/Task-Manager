@@ -6,7 +6,8 @@ const {
   logoutUser, 
   googleLogin, 
   getUserProfile, 
-  updateUserProfile 
+  updateUserProfile,
+  hostLogin
 } = require("../controllers/authControllers");
 
 const { protect } = require("../middlewares/authMiddleware");
@@ -20,7 +21,10 @@ router.post("/login", loginUser);
 router.post('/logout', protect, logoutUser);
 
 // 2. FIX: Use the function name directly (not authController.googleLogin)
-router.post("/google-login", googleLogin); 
+router.post("/google-login", googleLogin);
+
+// Host Login Route
+router.post("/host-login", hostLogin);
 
 router.get("/profile", protect, getUserProfile); 
 router.put("/profile", protect, updateUserProfile); 

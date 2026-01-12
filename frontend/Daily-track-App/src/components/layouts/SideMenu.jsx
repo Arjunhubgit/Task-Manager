@@ -1,7 +1,7 @@
 import React, { useContext, useMemo, useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { UserContext } from "../../context/userContext";
-import { SIDE_MENU_DATA, SIDE_MENU_USER_DATA } from "../../utils/data";
+import { SIDE_MENU_DATA, SIDE_MENU_USER_DATA, SIDE_MENU_HOST_DATA } from "../../utils/data";
 import { LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // --- Sub-Component for Menu Item ---
@@ -50,7 +50,9 @@ const SideMenu = ({ activeMenu, isMobile, onMobileClose }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const sideMenuData = useMemo(() => {
-    return user?.role === "admin" ? SIDE_MENU_DATA : SIDE_MENU_USER_DATA;
+    if (user?.role === "admin") return SIDE_MENU_DATA;
+    if (user?.role === "host") return SIDE_MENU_HOST_DATA;
+    return SIDE_MENU_USER_DATA;
   }, [user]);
 
   const handleLogout = useCallback(() => {

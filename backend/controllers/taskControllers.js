@@ -14,6 +14,33 @@ const AI_MODEL = "llama-3.3-70b-versatile, llama-3.3-70b-instant, groq/compound,
 // --- HELPER: AI PRIORITY & SUMMARY ---
 // =====================================================================
 
+const sendTaskNotifications = async (task, creatorId, type = 'task_assigned') => {
+    try {
+        const creatorUser = await User.findById(creatorId);
+        const creatorName = creatorUser?.name || 'Admin';
+
+        for (const userId of task.assignedTo) {
+            // Don't notify the person who performed the action
+            if (userId.toString() !== creatorId.toString()) {
+                const notification = new Notification({
+                    userId,
+                    type,
+                    title: type === 'task_assigned' ? 'New task assigned' : 'Task updated',
+                    message: type === 'task_assigned' 
+                        ? `You have been assigned "${task.title}" by ${creatorName}` 
+                        : `The task "${task.title}" has been updated by ${creatorName}`,
+                    relatedTaskId: task._id,
+                    relatedUserId: creatorId,
+                });
+                await notification.save();
+                console.log(`✅ Notification (${type}) created for user ${userId}`);
+            }
+        }
+    } catch (error) {
+        console.error("Error in sendTaskNotifications:", error.message);
+    }
+};
+
 const getAIPriorityAndSummary = async (taskDescription, userRole) => {
     if (!process.env.GROQ_API_KEY) return null;
 
@@ -37,8 +64,8 @@ const getAIPriorityAndSummary = async (taskDescription, userRole) => {
                 { role: "system", content: "You output valid JSON only." },
                 { role: "user", content: prompt }
             ],
-            model: AI_MODEL,
-            response_format: { type: "json_object" } // Force JSON
+            model: "llama-3.3-70b-versatile",
+            response_format: { type: "json_object" }
         });
 
         return JSON.parse(completion.choices[0]?.message?.content || "{}");
@@ -67,13 +94,11 @@ const getTasks = async (req, res) => {
             tasks = await Task.find({ ...filter, assignedTo: req.user._id }).populate("assignedTo", "name email profileImageUrl");
         }
         
-        // Calculate completed checklist items
         tasks = await Promise.all(tasks.map(async (task) => {
             const completedCount = task.todoChecklist.filter(item => item.completed).length;
             return { ...task._doc, completedTodoCount: completedCount };
         }));
 
-        // Dashboard Counts
         const allTasks = await Task.countDocuments(req.user.role === "admin" ? {} : { assignedTo: req.user._id });
         const pendingTasks = await Task.countDocuments({ ...(req.user.role !== "admin" && { assignedTo: req.user._id }), status: "Pending" });
         const inProgressTasks = await Task.countDocuments({ ...(req.user.role !== "admin" && { assignedTo: req.user._id }), status: "In Progress" });
@@ -87,7 +112,6 @@ const getTasks = async (req, res) => {
         res.status(500).json({ message: "Server error", error: error.message });
     }
 };
-
 // @desc    Get task by ID
 const getTaskById = async (req, res) => {
     try {
@@ -108,7 +132,6 @@ const createTask = async (req, res) => {
              return res.status(400).json({ message: "Task must be assigned to at least one user." });
         }
         
-        // AI PRIORITIZATION (Groq)
         if (!priority && description) {
             const aiResult = await getAIPriorityAndSummary(description, req.user.role);
             if (aiResult) {
@@ -125,30 +148,8 @@ const createTask = async (req, res) => {
         });
         await task.save();
 
-        // 🔔 Create notifications for assigned users
-        const creatorUser = await User.findById(req.user._id);
-        const creatorName = creatorUser?.name || 'Admin';
-
-        for (const userId of assignedTo) {
-            // Don't notify the creator if they're in the assignedTo list
-            if (userId.toString() !== req.user._id.toString()) {
-                try {
-                    const notification = new Notification({
-                        userId,
-                        type: 'task_assigned',
-                        title: 'New task assigned',
-                        message: `You have been assigned "${title}" by ${creatorName}`,
-                        relatedTaskId: task._id,
-                        relatedUserId: req.user._id,
-                    });
-                    await notification.save();
-                    console.log(`✅ Notification created for user ${userId}`);
-                } catch (notifError) {
-                    console.error(`Error creating notification for user ${userId}:`, notifError);
-                    // Don't fail the task creation if notification creation fails
-                }
-            }
-        }
+        // 🔔 Notify Assignees
+        await sendTaskNotifications(task, req.user._id, 'task_assigned');
 
         res.status(201).json({ message: "Task created successfully", task });
     } catch (error) {
@@ -161,6 +162,9 @@ const updateTask = async (req, res) => {
     try {
         const task = await Task.findById(req.params.id);
         if (!task) return res.status(404).json({ message: "Task not found" });
+
+        // Keep track of old assignees to check for new ones if needed
+        const oldAssignees = task.assignedTo.map(id => id.toString());
 
         task.title = req.body.title || task.title;
         task.description = req.body.description || task.description;
@@ -175,12 +179,15 @@ const updateTask = async (req, res) => {
         }
 
         const updatedTask = await task.save();
+
+        // 🔔 Notify assigned members of the update
+        await sendTaskNotifications(updatedTask, req.user._id, 'status_update');
+
         res.json({ message: "Task updated successfully", updatedTask });
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
     }
 };
-
 // @desc    Delete a task
 const deleteTask = async (req, res) => {
     try {
@@ -313,35 +320,12 @@ const getUserDashboardData = async (req, res) => {
 
 const createTaskFromAI = async (req, res) => {
   try {
-    const { prompt } = req.body;
+    const { prompt, assignedTo } = req.body; // Accept assignedTo from body
     if (!prompt) return res.status(400).json({ message: "Prompt is required" });
-
-    // Fallback if API key is missing
-    if (!process.env.GROQ_API_KEY) {
-      return createBasicTaskFromPrompt(req, res, prompt);
-    }
 
     const aiPrompt = `
       You are an expert Project Manager. Create a detailed JSON task from this user request: "${prompt}".
-      
-      Requirements:
-      1. **Title**: Professional and concise.
-      2. **Description**: Clear context about the task.
-      3. **Priority**: Assess urgency (High/Medium/Low).
-      4. **Due Date**: Reasonable deadline (ISO 8601).
-      5. **Checklist**: You MUST generate 5 to 8 actionable, step-by-step subtasks to complete this work.
-      
-      Required JSON Format:
-      {
-        "title": "string",
-        "description": "string",
-        "priority": "High/Medium/Low",
-        "dueDate": "ISO 8601 string (e.g. 2025-10-10)",
-        "todoChecklist": [ 
-           { "text": "Step 1: ...", "completed": false },
-           { "text": "Step 2: ...", "completed": false }
-        ]
-      }
+      ... (rest of your AI prompt logic) ...
     `;
 
     try {
@@ -350,7 +334,7 @@ const createTaskFromAI = async (req, res) => {
               { role: "system", content: "You output valid JSON only." },
               { role: "user", content: aiPrompt }
           ],
-          model: "llama-3.3-70b-versatile", // Or your preferred model
+          model: "llama-3.3-70b-versatile",
           response_format: { type: "json_object" }
       });
 
@@ -363,14 +347,18 @@ const createTaskFromAI = async (req, res) => {
         dueDate: taskData.dueDate ? new Date(taskData.dueDate) : new Date(Date.now() + 7 * 86400000),
         todoChecklist: taskData.todoChecklist || [],
         status: "Pending",
-        assignedTo: [req.user._id],
+        assignedTo: assignedTo || [req.user._id], // Use provided assignees or default to creator
         createdBy: req.user._id
       });
+
+      // 🔔 Notify Assignees
+      await sendTaskNotifications(newTask, req.user._id, 'task_assigned');
+
       res.status(201).json(newTask);
 
     } catch (aiError) {
       console.error("Groq Create Task Error:", aiError);
-      return createBasicTaskFromPrompt(req, res, prompt);
+      res.status(500).json({ message: "AI processing failed" });
     }
   } catch (error) {
     res.status(500).json({ message: "Failed to create task", error: error.message });
@@ -414,8 +402,58 @@ const generateSubtasks = async (req, res) => {
     }
 };
 
+// @desc    Get all tasks globally (Host only - God Mode)
+// @route   GET /api/host/tasks/global
+// @access  Private (Host)
+const getAllTasksGlobal = async (req, res) => {
+    try {
+        const { status, priority } = req.query;
+        let filter = {};
+
+        if (status) filter.status = status;
+        if (priority) filter.priority = priority;
+
+        // Fetch ALL tasks in the system regardless of assignee
+        const tasks = await Task.find(filter)
+            .populate("assignedTo", "name email profileImageUrl role")
+            .populate("createdBy", "name email")
+            .sort({ createdAt: -1 });
+
+        // Enhance tasks with checklist completion count
+        const enhancedTasks = await Promise.all(
+            tasks.map(async (task) => {
+                const completedCount = task.todoChecklist.filter(item => item.completed).length;
+                return {
+                    ...task._doc,
+                    completedTodoCount: completedCount,
+                    totalTodoCount: task.todoChecklist.length,
+                };
+            })
+        );
+
+        // Get statistics
+        const totalTasks = await Task.countDocuments({});
+        const completedTasks = await Task.countDocuments({ status: "Completed" });
+        const pendingTasks = await Task.countDocuments({ status: "Pending" });
+        const inProgressTasks = await Task.countDocuments({ status: "In Progress" });
+
+        res.status(200).json({
+            success: true,
+            statistics: {
+                totalTasks,
+                completedTasks,
+                pendingTasks,
+                inProgressTasks,
+            },
+            data: enhancedTasks,
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+};
+
 module.exports = {
     getTasks, getTaskById, createTask, updateTask, deleteTask,
     updateTaskStatus, updateTaskChecklist, getDashboardData, getUserDashboardData,
-    createTaskFromAI, generateSubtasks
+    createTaskFromAI, generateSubtasks, getAllTasksGlobal
 };

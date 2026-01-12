@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useContext, useEffect, useRef } from 'react';
-import { Menu, X, LayoutDashboard, Settings, Users, CheckSquare, LogOut, ChevronDown, User as UserIcon } from "lucide-react";
+import { Menu, X, LayoutDashboard, Settings, Users, CheckSquare, LogOut, ChevronDown, User as UserIcon, Mail, AlertCircle, Loader } from "lucide-react";
 import { UserContext } from '../../context/userContext'; // Import User Context
 import Logo_img2 from '../../assets/images/logo2.png';
 import SearchBar from '../navbar/SearchBar';
@@ -7,6 +7,8 @@ import NotificationsBell from '../navbar/NotificationsBell';
 import QuickCreateButton from '../navbar/QuickCreateButton';
 import axiosInstance from '../../utils/axiosInstance';
 import { API_PATHS } from '../../utils/apiPaths';
+import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
 // --- Sub-Component for Logo and Brand ---
 const Brand = () => (
@@ -33,13 +35,79 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
     const { user, clearUser } = useContext(UserContext); // Get user data and logout function
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [userStatus, setUserStatus] = useState('online'); // 'online', 'idle', 'dnd', 'invisible'
+    const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
+    const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+    const [messageError, setMessageError] = useState(null);
     const profileRef = useRef(null);
+    const navigate = useNavigate();
 
     const handleMenuToggle = useCallback(() => {
         if (onMenuToggle) {
             onMenuToggle();
         }
     }, [onMenuToggle]);
+
+    // Fetch unread messages count
+    const fetchUnreadMessagesCount = useCallback(async () => {
+        if (!user || !user._id) return;
+        
+        try {
+            setIsLoadingMessages(true);
+            setMessageError(null);
+            // Using notifications endpoint as a placeholder for messages
+            // You can replace this with actual messages endpoint when available
+            const response = await axiosInstance.get(
+                API_PATHS.NOTIFICATIONS.GET_UNREAD_COUNT(user._id)
+            );
+            
+            if (response.data && response.data.success) {
+                setUnreadMessagesCount(response.data.data?.unreadCount || 0);
+            }
+        } catch (error) {
+            console.error('Failed to fetch unread messages:', error);
+            setMessageError('Failed to load messages');
+            // Silently fail - don't show toast for background requests
+        } finally {
+            setIsLoadingMessages(false);
+        }
+    }, [user]);
+
+    // Fetch messages on component mount and set up polling
+    useEffect(() => {
+        if (!user) return;
+        
+        fetchUnreadMessagesCount();
+        
+        // Poll for unread messages every 30 seconds
+        const messageInterval = setInterval(() => {
+            fetchUnreadMessagesCount();
+        }, 30000);
+        
+        return () => clearInterval(messageInterval);
+    }, [user, fetchUnreadMessagesCount]);
+
+    // Handle email/messages button click
+    const handleEmailClick = useCallback(async () => {
+        if (isLoadingMessages) return;
+        
+        try {
+            // Navigate to messages page - adjust route based on user role
+            const messagesRoute = user?.role === 'admin' 
+                ? '/admin/messages' 
+                : '/user/messages';
+            
+            navigate(messagesRoute);
+            
+            // Reset unread count after viewing
+            setTimeout(() => {
+                setUnreadMessagesCount(0);
+            }, 500);
+        } catch (error) {
+            console.error('Navigation error:', error);
+            toast.error('Failed to open messages');
+        }
+    }, [user, navigate, isLoadingMessages]);
+
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -87,6 +155,38 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
 
                         {/* Notifications Bell */}
                         <NotificationsBell />
+
+                        {/* Email Button */}
+                        <button 
+                            onClick={handleEmailClick}
+                            disabled={isLoadingMessages}
+                            className="relative p-2.5 rounded-xl text-gray-400 hover:text-orange-400 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-all duration-200 active:scale-95 group"
+                            title={messageError ? 'Failed to load messages' : 'Messages'}
+                            aria-label="Messages"
+                        >
+                            {isLoadingMessages ? (
+                                <Loader className="w-5 h-5 animate-spin" />
+                            ) : (
+                                <Mail className="w-5 h-5 group-hover:animate-bounce" />
+                            )}
+                            
+                            {/* Unread Badge */}
+                            {unreadMessagesCount > 0 && !isLoadingMessages && (
+                                <span className="absolute top-1 right-1 min-w-max h-5 px-1.5 bg-gradient-to-r from-orange-500 to-orange-600 rounded-full text-xs text-white font-bold shadow-lg shadow-orange-500/50 flex items-center justify-center">
+                                    {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
+                                </span>
+                            )}
+                            
+                            {/* Loading indicator without badge */}
+                            {isLoadingMessages && (
+                                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+                            )}
+                            
+                            {/* Error indicator */}
+                            {messageError && !isLoadingMessages && (
+                                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                            )}
+                        </button>
                     </>
                 )}
                 
