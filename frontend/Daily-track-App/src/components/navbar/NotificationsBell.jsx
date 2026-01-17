@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
-import { Bell, CheckCircle, AlertCircle, MessageSquare, UserPlus, Clock, X } from 'lucide-react';
+import { Bell, CheckCircle, AlertCircle, MessageSquare, UserPlus, Clock, X, Trash2 } from 'lucide-react';
 import { UserContext } from '../../context/userContext';
 
 const NotificationsBell = () => {
     const [isOpen, setIsOpen] = useState(false);
-    const { notifications, markNotificationAsRead, deleteNotification, markAllNotificationsAsRead } = useContext(UserContext);
+    const { notifications, markNotificationAsRead, deleteNotification, markAllNotificationsAsRead, deleteAllNotifications } = useContext(UserContext);
 
     const notificationsRef = useRef(null);
     const unreadCount = notifications.filter(n => !n.read).length;
@@ -88,16 +88,29 @@ const NotificationsBell = () => {
             {isOpen && (
                 <div className="absolute right-0 top-full mt-3 w-70 sm:w-96 bg-[#0A0A0A] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 max-h-[85vh] sm:max-h-[90vh] transform transition-all duration-300 origin-top-right animate-in fade-in slide-in-from-top-2">
                     {/* Header */}
-                    <div className="p-4 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
-                        <h3 className="font-semibold text-white text-sm">Notifications</h3>
-                        {unreadCount > 0 && (
-                            <button
-                                onClick={markAllNotificationsAsRead}
-                                className="text-xs text-orange-500 hover:text-orange-400 transition-colors font-medium"
-                            >
-                                Mark all as read
-                            </button>
-                        )}
+                    <div className="p-4 border-b border-white/5 bg-white/[0.02]">
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="font-semibold text-white text-sm">Notifications</h3>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {unreadCount > 0 && (
+                                <button
+                                    onClick={markAllNotificationsAsRead}
+                                    className="flex-1 text-xs text-orange-500 hover:text-orange-400 transition-colors font-medium bg-orange-500/10 hover:bg-orange-500/20 py-1.5 px-2 rounded-lg"
+                                >
+                                    Mark all as read
+                                </button>
+                            )}
+                            {notifications.length > 0 && (
+                                <button
+                                    onClick={deleteAllNotifications}
+                                    className="flex-1 text-xs text-red-500 hover:text-red-400 transition-colors font-medium bg-red-500/10 hover:bg-red-500/20 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1"
+                                >
+                                    <Trash2 className="w-3 h-3" />
+                                    Delete all
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     {/* Notifications List */}

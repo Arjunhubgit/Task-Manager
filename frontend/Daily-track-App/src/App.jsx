@@ -32,7 +32,9 @@ import UserMessages from './pages/User/UserMessages'; // Keeping this as it was 
 import HostDashboard from './pages/Host/HostDashboard';
 import GlobalTaskManager from './pages/Host/GlobalTaskManager';
 import GlobalUsers from './pages/Host/GlobalUsers';
+import UserDetailPage from './pages/Host/UserDetailPage';
 import GodMode from './pages/Host/GodMode';
+import ReloadingIcon from './components/ReloadingIcon.jsx';
 
 const App = () => {
   return (
@@ -67,6 +69,7 @@ const App = () => {
             <Route path='host/dashboard' element={<HostDashboard />} />
             <Route path='host/tasks' element={<GlobalTaskManager />} />
             <Route path='host/users' element={<GlobalUsers />} />
+            <Route path='host/users/:id' element={<UserDetailPage />} />
             <Route path='host/god-mode' element={<GodMode />} />
           </Route>
 
@@ -84,11 +87,7 @@ const Root = () => {
   const { user, loading } = useContext(UserContext);
 
   if (loading) {
-    return (
-      <div className="h-screen w-full flex items-center justify-center bg-[#050505] text-white">
-        Loading...
-      </div>
-    );
+    return <ReloadingIcon isLoading={loading} />;
   }
 
   if (!user) {

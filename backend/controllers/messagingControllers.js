@@ -20,6 +20,8 @@ exports.getConversationMessages = async (req, res) => {
   try {
     const { conversationId } = req.params;
     const messages = await Message.find({ conversationId })
+      .populate('senderId', 'name email profileImageUrl role')
+      .populate('recipientId', 'name email profileImageUrl role')
       .sort({ timestamp: 1 });
     res.json(messages);
   } catch (err) {
@@ -31,25 +33,39 @@ exports.getConversationMessages = async (req, res) => {
 exports.sendMessage = async (req, res) => {
   try {
     const { conversationId, senderId, recipientId, content, attachments } = req.body;
+    
+    // Validate required fields
+    if (!senderId || !recipientId || !content) {
+      return res.status(400).json({ error: 'Missing required fields: senderId, recipientId, content' });
+    }
+
     let conv = conversationId;
+    
     // If no conversationId, create/find direct conversation
     if (!conv) {
+      // Try to find existing conversation - order doesn't matter in $all
       let conversation = await Conversation.findOne({
         participants: { $all: [senderId, recipientId] },
         $expr: { $eq: [{ $size: "$participants" }, 2] }
       });
+      
       if (!conversation) {
+        // Create new conversation with both participants
         conversation = new Conversation({
           participants: [senderId, recipientId],
           lastMessage: content,
           lastMessageTime: new Date(),
-          unreadCounts: { [recipientId]: 1 }
+          unreadCounts: { 
+            [senderId]: 0,
+            [recipientId]: 1 
+          }
         });
         await conversation.save();
       }
       conv = conversation._id;
     }
-    // Create message
+    
+    // Create message with populated data
     const message = new Message({
       conversationId: conv,
       senderId,
@@ -58,13 +74,20 @@ exports.sendMessage = async (req, res) => {
       attachments: attachments || [],
       timestamp: new Date()
     });
+    
     await message.save();
-    // Update conversation
+    
+    // Populate sender and recipient info
+    await message.populate('senderId', 'name email profileImageUrl role');
+    await message.populate('recipientId', 'name email profileImageUrl role');
+    
+    // Update conversation with last message info and unread count
     await Conversation.findByIdAndUpdate(conv, {
       lastMessage: content,
       lastMessageTime: new Date(),
       $inc: { [`unreadCounts.${recipientId}`]: 1 }
     });
+    
     res.json(message);
   } catch (err) {
     res.status(500).json({ error: 'Failed to send message' });
@@ -118,5 +141,41 @@ exports.deleteConversation = async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete conversation' });
+  }
+};
+
+exports.clearChat = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+
+    // Delete all messages matching this conversation ID
+    await Message.deleteMany({ conversationId });
+
+    // Optional: Reset the last message preview to show the chat is empty
+    await Conversation.findByIdAndUpdate(conversationId, {
+      lastMessage: null, // Removes the text preview
+      // lastMessageTime: new Date() // Keep timestamp to keep it at top, or remove line to let it drop
+    });
+
+    res.status(200).json({ message: 'Chat history cleared successfully' });
+  } catch (error) {
+    console.error("Clear chat error:", error);
+    res.status(500).json({ error: 'Failed to clear chat history' });
+  }
+};
+
+exports.markConversationAsRead = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { userId } = req.body; // We need to know WHICH user read it
+
+    // Update the unreadCounts map specifically for this user to 0
+    await Conversation.findByIdAndUpdate(conversationId, {
+      $set: { [`unreadCounts.${userId}`]: 0 }
+    });
+
+    res.status(200).json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to mark conversation as read' });
   }
 };

@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
 import { Search, ArrowRight, Zap, FileText, Users, X, Loader } from 'lucide-react';
 import axiosInstance from '../../utils/axiosInstance';
 import { useNavigate } from 'react-router-dom';
+import { UserContext } from '../../context/userContext';
 
 const   SearchBar = () => {
     const [isOpen, setIsOpen] = useState(false);
@@ -12,6 +13,7 @@ const   SearchBar = () => {
     const inputRef = useRef(null);
     const navigate = useNavigate();
     const searchTimeoutRef = useRef(null);
+    const { user } = useContext(UserContext);
 
     // Fetch search results from API
     const performSearch = useCallback(async (term) => {
@@ -22,17 +24,33 @@ const   SearchBar = () => {
 
         setIsLoading(true);
         try {
-            // Fetch tasks and users in parallel
-            const [tasksResponse, usersResponse] = await Promise.all([
-                axiosInstance.get('/api/tasks').catch(err => {
+            // Check if user is admin/host or regular member
+            const isAdminOrHost = user?.role === 'admin' || user?.role === 'host';
+
+            // For members, only fetch their own tasks; for admin/host, fetch all tasks
+            let tasksResponse;
+            if (isAdminOrHost) {
+                // Admin/Host view - fetch all tasks
+                tasksResponse = await axiosInstance.get('/api/tasks').catch(err => {
                     console.error('Tasks fetch error:', err);
                     return { data: { tasks: [] } };
-                }),
-                axiosInstance.get('/api/users').catch(err => {
+                });
+            } else {
+                // Member view - only fetch their own tasks
+                tasksResponse = await axiosInstance.get(`/api/tasks?assignedTo=${user?._id}`).catch(err => {
+                    console.error('Tasks fetch error:', err);
+                    return { data: { tasks: [] } };
+                });
+            }
+
+            // Only fetch users for admin/host
+            let usersResponse = { data: [] };
+            if (isAdminOrHost) {
+                usersResponse = await axiosInstance.get('/api/users').catch(err => {
                     console.error('Users fetch error:', err);
                     return { data: [] };
-                })
-            ]);
+                });
+            }
 
             const tasks = tasksResponse.data.tasks || tasksResponse.data || [];
             // Handle both array response and object with users property
@@ -59,7 +77,7 @@ const   SearchBar = () => {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [user]);
 
     // Debounced search
     const handleSearchChange = (e) => {
@@ -82,13 +100,23 @@ const   SearchBar = () => {
 
     // Handle result selection
     const handleTaskClick = (taskId) => {
-        navigate(`/admin/tasks?highlight=${taskId}`, { state: { highlightTaskId: taskId } });
+        // Route based on user role
+        const isAdminOrHost = user?.role === 'admin' || user?.role === 'host';
+        const route = isAdminOrHost 
+            ? `/admin/tasks?highlight=${taskId}`
+            : `/user/tasks?highlight=${taskId}`;
+        
+        navigate(route, { state: { highlightTaskId: taskId } });
         setIsOpen(false);
         setSearchTerm('');
         setSearchResults({ tasks: [], users: [] });
     };
 
     const handleUserClick = (userId) => {
+        // Only admin/host can view users
+        const isAdminOrHost = user?.role === 'admin' || user?.role === 'host';
+        if (!isAdminOrHost) return;
+
         // Navigate to user details page
         navigate(`/admin/users?highlight=${userId}`, { state: { highlightUserId: userId } });
         setIsOpen(false);
@@ -140,7 +168,9 @@ const   SearchBar = () => {
                 className="hidden md:flex items-center gap-3 px-4 py-2.5 rounded-xl bg-gradient-to-r from-white/8 to-white/5 border border-white/15 hover:from-white/12 hover:to-white/10 hover:border-orange-500/50 shadow-lg shadow-black/20 hover:shadow-orange-500/10 transition-all duration-300 group min-w-[300px] active:scale-95"
             >
                 <Search className="w-5 h-5 text-orange-400 group-hover:text-orange-300 transition-colors flex-shrink-0" />
-                <span className="text-sm text-gray-300 group-hover:text-gray-100 flex-1 text-left font-medium">Search tasks & team...</span>
+                <span className="text-sm text-gray-300 group-hover:text-gray-100 flex-1 text-left font-medium">
+                    {user?.role === 'admin' || user?.role === 'host' ? 'Search tasks & team...' : 'Search your tasks...'}
+                </span>
                 <kbd className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/8 border border-white/15 text-xs text-gray-400 group-hover:bg-orange-500/10 group-hover:border-orange-500/30 transition-all duration-200">
                     <span className="font-semibold">⌘</span><span>K</span>
                 </kbd>
@@ -165,7 +195,7 @@ const   SearchBar = () => {
                                 <input
                                     ref={inputRef}
                                     type="text"
-                                    placeholder="Search tasks, team members..."
+                                    placeholder={user?.role === 'admin' || user?.role === 'host' ? "Search tasks, team members..." : "Search your tasks..."}
                                     value={searchTerm}
                                     onChange={handleSearchChange}
                                     className="flex-1 bg-transparent outline-none text-white placeholder-gray-500 text-sm font-medium"
@@ -195,8 +225,16 @@ const   SearchBar = () => {
                                     <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500/20 to-orange-600/10 flex items-center justify-center mx-auto mb-3">
                                         <Zap className="w-6 h-6 text-orange-400" />
                                     </div>
-                                    <p className="text-sm text-gray-400 font-medium">Start typing to search tasks & team members</p>
-                                    <p className="text-xs text-gray-600 mt-2">Try searching by task name or team member name</p>
+                                    <p className="text-sm text-gray-400 font-medium">
+                                        {user?.role === 'admin' || user?.role === 'host' 
+                                            ? 'Start typing to search tasks & team members' 
+                                            : 'Start typing to search your tasks'}
+                                    </p>
+                                    <p className="text-xs text-gray-600 mt-2">
+                                        {user?.role === 'admin' || user?.role === 'host'
+                                            ? 'Try searching by task name or team member name'
+                                            : 'Try searching by task name or description'}
+                                    </p>
                                 </div>
                             ) : !isLoading && hasResults ? (
                                 <>
@@ -225,8 +263,8 @@ const   SearchBar = () => {
                                         </div>
                                     )}
 
-                                    {/* Users Results */}
-                                    {searchResults.users.length > 0 && (
+                                    {/* Users Results - Only for Admin/Host */}
+                                    {(user?.role === 'admin' || user?.role === 'host') && searchResults.users.length > 0 && (
                                         <div className="p-3">
                                             <p className="text-xs text-gray-500 px-3 py-2 font-bold uppercase tracking-wider">👥 Team</p>
                                             {searchResults.users.map((user, index) => (

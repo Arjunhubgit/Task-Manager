@@ -1,12 +1,16 @@
 import React, { useContext, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { UserContext } from '../../context/userContext';
 import DashboardLayout from '../../components/layouts/DashboardLayout';
 import { API_PATHS } from '../../utils/apiPaths';
 import axiosInstance from '../../utils/axiosInstance';
 import toast from 'react-hot-toast';
+
+
 import { Users, Search, Shield, UserCheck, UserX, Mail, Calendar, Activity, Filter, Download, RefreshCw } from 'lucide-react';
 
 const GlobalUsers = () => {
+	const navigate = useNavigate();
 	const { user } = useContext(UserContext);
 	const [users, setUsers] = useState([]);
 	const [loading, setLoading] = useState(true);
@@ -30,6 +34,7 @@ const GlobalUsers = () => {
 			setLoading(false);
 		}
 	};
+
 
 	// Filter users based on search and filters
 	const filteredUsers = users.filter(u => {
@@ -147,7 +152,8 @@ const GlobalUsers = () => {
 						onClick={fetchAllUsers}
 						className="flex items-center gap-2 bg-[#EA8D23]/10 border border-[#EA8D23]/30 text-[#EA8D23] px-4 py-2.5 rounded-lg hover:bg-[#EA8D23]/20 transition-all"
 					>
-						<RefreshCw className="w-4 h-4" />
+						<RefreshCw className="w-5 h-5" />
+
 						Refresh
 					</button>
 				</div>
@@ -158,7 +164,7 @@ const GlobalUsers = () => {
 				<div className="flex items-center justify-center h-96 bg-white/5 rounded-xl border border-white/10">
 					<div className="text-center">
 						<div className="animate-spin rounded-full h-12 w-12 border-t-2 border-[#EA8D23] mx-auto mb-4"></div>
-						<p className="text-gray-400">Loading users...</p>
+						Loading users...
 					</div>
 				</div>
 			) : (
@@ -230,7 +236,7 @@ const GlobalUsers = () => {
 											</td>
 											<td className="p-4">
 												<button
-													onClick={() => toast.info(`Viewing details for ${u.name}`)}
+													onClick={() => navigate(`/host/users/${u._id}`)}
 													className="text-[#EA8D23] hover:text-[#EA8D23]/80 text-sm font-semibold transition-colors"
 												>
 													View Details

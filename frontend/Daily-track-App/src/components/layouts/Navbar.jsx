@@ -1,27 +1,15 @@
 import React, { useState, useCallback, useContext, useEffect, useRef } from 'react';
 import { Menu, X, LayoutDashboard, Settings, Users, CheckSquare, LogOut, ChevronDown, User as UserIcon, Mail, AlertCircle, Loader } from "lucide-react";
 import { UserContext } from '../../context/userContext'; // Import User Context
-import Logo_img2 from '../../assets/images/logo2.png';
+import logo from '../../assets/svg/logo.png';
+import title from '../../assets/svg/title.png';
 import SearchBar from '../navbar/SearchBar';
 import NotificationsBell from '../navbar/NotificationsBell';
-import QuickCreateButton from '../navbar/QuickCreateButton';
 import axiosInstance from '../../utils/axiosInstance';
 import { API_PATHS } from '../../utils/apiPaths';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-
-// --- Sub-Component for Logo and Brand ---
-const Brand = () => (
-    <div className="flex items-center gap-3 flex-shrink-0 group cursor-pointer">
-        <div className="relative">
-            <div className="absolute inset-0 bg-orange-500 blur-lg opacity-20 group-hover:opacity-40 transition-opacity duration-300"></div>
-            <img src={Logo_img2} alt="Task Manager Logo" className="relative w-9 h-9 rounded-lg border border-white/10" />
-        </div>
-        <h2 className="text-xl font-extrabold text-white tracking-tight hidden sm:block">
-            CHRONO<span className="text-[#EA8D23]">FLOW</span>
-        </h2>
-    </div>
-);
+import { getImageUrl } from '../../utils/helper';
 
 // --- Static Desktop Links Data ---
 const DESKTOP_LINKS = [
@@ -41,6 +29,12 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
     const profileRef = useRef(null);
     const navigate = useNavigate();
 
+    useEffect(() => {
+        if (user?.status) {
+            setUserStatus(user.status);
+        }
+    }, [user]);
+
     const handleMenuToggle = useCallback(() => {
         if (onMenuToggle) {
             onMenuToggle();
@@ -50,7 +44,7 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
     // Fetch unread messages count
     const fetchUnreadMessagesCount = useCallback(async () => {
         if (!user || !user._id) return;
-        
+
         try {
             setIsLoadingMessages(true);
             setMessageError(null);
@@ -59,7 +53,7 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
             const response = await axiosInstance.get(
                 API_PATHS.NOTIFICATIONS.GET_UNREAD_COUNT(user._id)
             );
-            
+
             if (response.data && response.data.success) {
                 setUnreadMessagesCount(response.data.data?.unreadCount || 0);
             }
@@ -75,29 +69,29 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
     // Fetch messages on component mount and set up polling
     useEffect(() => {
         if (!user) return;
-        
+
         fetchUnreadMessagesCount();
-        
+
         // Poll for unread messages every 30 seconds
         const messageInterval = setInterval(() => {
             fetchUnreadMessagesCount();
         }, 30000);
-        
+
         return () => clearInterval(messageInterval);
     }, [user, fetchUnreadMessagesCount]);
 
     // Handle email/messages button click
     const handleEmailClick = useCallback(async () => {
         if (isLoadingMessages) return;
-        
+
         try {
             // Navigate to messages page - adjust route based on user role
-            const messagesRoute = user?.role === 'admin' 
-                ? '/admin/messages' 
+            const messagesRoute = user?.role === 'admin'
+                ? '/admin/messages'
                 : '/user/messages';
-            
+
             navigate(messagesRoute);
-            
+
             // Reset unread count after viewing
             setTimeout(() => {
                 setUnreadMessagesCount(0);
@@ -122,12 +116,12 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
 
     // Determine online status: user must be logged in AND status must be 'online'
     const isOnline = !!user && userStatus === 'online';
-    
+
     return (
         <nav className="flex items-center justify-between px-4 sm:px-6 py-4 h-16 bg-[#050505]/80 backdrop-blur-xl border-b border-white/10 sticky top-0 z-[100] transition-all duration-300">
-            
-            {/* Left Section: Mobile Toggle and Brand */}
-            <div className="flex items-center gap-4">
+
+            {/* Left Section: Mobile Toggle */}
+            <div className="flex items-center gap-3">
                 <button
                     className='lg:hidden text-gray-400 hover:text-[#EA8D23] focus:outline-none p-2 rounded-full transition-colors duration-200 hover:bg-white/5'
                     onClick={handleMenuToggle}
@@ -135,29 +129,38 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                 >
                     {isMobileMenuOpen ? <X className="w-6 h-6 text-red-500" /> : <Menu className="w-6 h-6" />}
                 </button>
-                <Brand />
+                {/* Logo and Title - Desktop only */}
+                <div className="hidden md:flex items-center gap-1">
+                    <img 
+                        src={logo} 
+                        alt="Logo" 
+                        className="h-9 w-auto rounded-lg hover:rotate-360 transition-transform duration-500" 
+                    />
+                    <img 
+                        src={title} 
+                        alt="Title" 
+                        className="h-8 w-40" 
+                    />
+                </div>
             </div>
-            
+
 
 
             {/* Right Section: Quick Create, Notifications, and User Profile */}
             <div className="flex items-center gap-3" ref={profileRef}>
                 {user && (
                     <>
-                        
+
                         {/* Search Bar - Hidden on mobile */}
                         <div className="hidden lg:flex">
                             <SearchBar />
                         </div>
-                        
-                        {/* Quick Create Button */}
-                        <QuickCreateButton />
 
                         {/* Notifications Bell */}
                         <NotificationsBell />
 
                         {/* Email Button */}
-                        <button 
+                        <button
                             onClick={handleEmailClick}
                             disabled={isLoadingMessages}
                             className="relative p-2.5 rounded-xl text-gray-400 hover:text-orange-400 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-all duration-200 active:scale-95 group"
@@ -169,19 +172,19 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                             ) : (
                                 <Mail className="w-5 h-5 group-hover:animate-bounce" />
                             )}
-                            
+
                             {/* Unread Badge */}
                             {unreadMessagesCount > 0 && !isLoadingMessages && (
                                 <span className="absolute top-1 right-1 min-w-max h-5 px-1.5 bg-gradient-to-r from-orange-500 to-orange-600 rounded-full text-xs text-white font-bold shadow-lg shadow-orange-500/50 flex items-center justify-center">
                                     {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
                                 </span>
                             )}
-                            
+
                             {/* Loading indicator without badge */}
                             {isLoadingMessages && (
                                 <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
                             )}
-                            
+
                             {/* Error indicator */}
                             {messageError && !isLoadingMessages && (
                                 <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
@@ -189,20 +192,21 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                         </button>
                     </>
                 )}
-                
+
                 {user ? (
                     <div className="relative">
                         {/* Profile Button */}
-                        <button 
+                        <button
                             onClick={() => setIsProfileOpen(!isProfileOpen)}
                             className="flex items-center gap-3 pl-2 pr-4 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 hover:border-orange-500/30 transition-all duration-300 group active:scale-95 hover:shadow-lg hover:shadow-orange-500/10"
                         >
                             {/* Avatar Container */}
                             <div className="relative">
                                 {user.profileImageUrl ? (
-                                    <img 
-                                        src={user.profileImageUrl} 
-                                        alt={user.name} 
+                                    <img
+                                        // FIX: Use the helper to resolve the URL correctly
+                                        src={getImageUrl(user.profileImageUrl)}
+                                        alt={user.name}
                                         className="w-10 h-10 rounded-full object-cover border-2 border-orange-500/20 group-hover:border-orange-500/50 transition-colors"
                                     />
                                 ) : (
@@ -239,7 +243,7 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                             {/* Status Selection Section */}
                             <div className="p-3 border-b border-white/5">
                                 <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide px-2 mb-2">Status</p>
-                                
+
                                 {/* Online */}
                                 <button
                                     onClick={async () => {
@@ -253,11 +257,10 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                                             console.error('Failed to update status:', error);
                                         }
                                     }}
-                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left mb-1.5 ${
-                                        userStatus === 'online'
+                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left mb-1.5 ${userStatus === 'online'
                                             ? 'bg-emerald-500/15 text-emerald-300'
                                             : 'text-gray-300 hover:bg-white/5 hover:text-white'
-                                    }`}
+                                        }`}
                                 >
                                     <div className="w-3 h-3 rounded-full bg-emerald-500 flex-shrink-0"></div>
                                     <span className="text-sm font-medium">Online</span>
@@ -276,11 +279,10 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                                             console.error('Failed to update status:', error);
                                         }
                                     }}
-                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left mb-1.5 ${
-                                        userStatus === 'idle'
+                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left mb-1.5 ${userStatus === 'idle'
                                             ? 'bg-yellow-500/15 text-yellow-300'
                                             : 'text-gray-300 hover:bg-white/5 hover:text-white'
-                                    }`}
+                                        }`}
                                 >
                                     <div className="w-3 h-3 rounded-full bg-yellow-500 flex-shrink-0"></div>
                                     <span className="text-sm font-medium">Idle</span>
@@ -299,11 +301,10 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                                             console.error('Failed to update status:', error);
                                         }
                                     }}
-                                    className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-lg transition-colors text-left mb-1.5 ${
-                                        userStatus === 'dnd'
+                                    className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-lg transition-colors text-left mb-1.5 ${userStatus === 'dnd'
                                             ? 'bg-red-500/15 text-red-300'
                                             : 'text-gray-300 hover:bg-white/5 hover:text-white'
-                                    }`}
+                                        }`}
                                 >
                                     <div className="w-3 h-3 rounded-full bg-red-500 flex-shrink-0 mt-0.5"></div>
                                     <div>
@@ -325,11 +326,10 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                                             console.error('Failed to update status:', error);
                                         }
                                     }}
-                                    className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${
-                                        userStatus === 'invisible'
+                                    className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-lg transition-colors text-left ${userStatus === 'invisible'
                                             ? 'bg-gray-500/15 text-gray-300'
                                             : 'text-gray-300 hover:bg-white/5 hover:text-white'
-                                    }`}
+                                        }`}
                                 >
                                     <div className="w-3 h-3 rounded-full bg-gray-500 flex-shrink-0 mt-0.5"></div>
                                     <div>
@@ -351,7 +351,7 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
 
                             {/* Sign Out */}
                             <div className="p-1 border-t border-white/5">
-                                <button 
+                                <button
                                     onClick={clearUser}
                                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors text-left"
                                 >
@@ -360,15 +360,15 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                             </div>
                         </div>
                     </div>
-                    
+
                 ) : (
                     // Fallback for when no user is logged in (Offline State)
                     <div className="flex items-center gap-3">
-                         <div className="px-3 py-1.5 rounded-full border border-gray-700 bg-gray-800/50 flex items-center gap-2">
+                        <div className="px-3 py-1.5 rounded-full border border-gray-700 bg-gray-800/50 flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full bg-gray-500"></div>
                             <span className="text-xs font-medium text-gray-400">Offline</span>
-                         </div>
-                         <a href="/login" className="text-sm text-[#EA8D23] hover:text-orange-400 font-medium transition-colors">Login</a>
+                        </div>
+                        <a href="/login" className="text-sm text-[#EA8D23] hover:text-orange-400 font-medium transition-colors">Login</a>
                     </div>
                 )}
             </div>

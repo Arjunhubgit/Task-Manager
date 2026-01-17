@@ -14,7 +14,7 @@ const generateToken = (userId) => {
 //  */
 const registerUser = async (req, res) => {
     try {
-        const { name, email, password, profileImageUrl, inviteCode } = req.body;
+        const { name, email, password, profileImageUrl, inviteCode, role, organizationName, adminCode } = req.body;
 
         // 1. VALIDATION: Since password is not required in DB, we MUST check it here
         if (!password) {
@@ -27,12 +27,22 @@ const registerUser = async (req, res) => {
             return res.status(400).json({ message: "User already exists" });
         }
 
-        // 2. Handle invite code validation and admin assignment
-        let role = "member";
+        // 2. Handle admin registration
+        let userRole = "member";
         let parentAdminId = null;
 
-        if (inviteCode && inviteCode.trim() !== "") {
-            // Verify the invite code
+        if (role === "admin") {
+            // Verify admin code
+            const expectedAdminCode = process.env.ADMIN_CODE || process.env.ADMIN_INVITE_TOKEN;
+            if (adminCode !== expectedAdminCode) {
+                return res.status(401).json({ message: "Invalid admin code" });
+            }
+            if (!organizationName || !organizationName.trim()) {
+                return res.status(400).json({ message: "Organization name is required for admin registration" });
+            }
+            userRole = "admin";
+        } else if (inviteCode && inviteCode.trim() !== "") {
+            // Handle invite code validation for regular users
             const invite = await AdminInvite.findOne({ 
                 inviteCode: inviteCode.toUpperCase() 
             });
@@ -59,7 +69,7 @@ const registerUser = async (req, res) => {
 
             // All validations passed - set the parent admin
             parentAdminId = invite.adminId;
-            role = "member";
+            userRole = "member";
 
             // Mark invite as used
             await AdminInvite.findByIdAndUpdate(
@@ -85,13 +95,14 @@ const registerUser = async (req, res) => {
             email,
             password: hashedPassword,
             profileImageUrl: profileImageUrl,
-            role,
-            parentAdminId, // Set the admin from invite
+            role: userRole,
+            parentAdminId,
+            organizationName: userRole === "admin" ? organizationName : undefined,
             isOnline: true
         });
 
         // Update the invite's usedBy with actual user ID
-        if (inviteCode && inviteCode.trim() !== "") {
+        if (inviteCode && inviteCode.trim() !== "" && userRole === "member") {
             await AdminInvite.updateOne(
                 { inviteCode: inviteCode.toUpperCase(), "usedBy.userId": null },
                 { $set: { "usedBy.$[elem].userId": user._id } },
@@ -106,13 +117,14 @@ const registerUser = async (req, res) => {
             profileImageUrl: user.profileImageUrl,
             role: user.role,
             parentAdminId: user.parentAdminId,
+            organizationName: user.organizationName,
             token: generateToken(user._id),
             message: "Registration successful!"
         });
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
     }
-}
+};
 
 const loginUser = async (req, res) => {
     try {
@@ -151,9 +163,10 @@ const googleLogin = async (req, res) => {
         let user = await User.findOne({ email });
 
         if (user) {
-            // --- UPDATE: Existing user logging in via Google ---
+            // --- FIX: Refresh the Google photo URL and set status to online ---
             user.isOnline = true;
             user.status = 'online'; 
+            user.profileImageUrl = googlePhotoUrl; // Always update with the latest URL from Google
             await user.save();
 
             res.json({
@@ -164,78 +177,14 @@ const googleLogin = async (req, res) => {
                 profileImageUrl: user.profileImageUrl,
                 parentAdminId: user.parentAdminId,
                 isOnline: true,
+                status: user.status, // Ensure status is sent back
                 token: generateToken(user._id)
             });
         } else {
-            // New user registration via Google
-            let role = "member";
-            let parentAdminId = null;
-
-            // Handle invite code validation
-            if (inviteCode && inviteCode.trim() !== "") {
-                const invite = await AdminInvite.findOne({ 
-                    inviteCode: inviteCode.toUpperCase() 
-                });
-
-                if (!invite) {
-                    return res.status(400).json({ message: "Invalid invite code" });
-                }
-
-                if (!invite.isActive) {
-                    return res.status(400).json({ message: "This invite has been deactivated" });
-                }
-
-                // Check if invite has expired
-                if (invite.expiresAt && new Date() > invite.expiresAt) {
-                    await AdminInvite.findByIdAndUpdate(invite._id, { isActive: false });
-                    return res.status(400).json({ message: "This invite has expired" });
-                }
-
-                // Check if max uses has been reached
-                if (invite.maxUses && invite.timesUsed >= invite.maxUses) {
-                    await AdminInvite.findByIdAndUpdate(invite._id, { isActive: false });
-                    return res.status(400).json({ message: "This invite has reached its usage limit" });
-                }
-
-                parentAdminId = invite.adminId;
-                role = "member";
-            }
-
-            // --- UPDATE: Set status to online for new Google users ---
-            user = await User.create({
-                name: name,
-                email: email,
-                profileImageUrl: googlePhotoUrl,
-                role: role,
-                parentAdminId,
-                isOnline: true,
-                status: 'online'
-            });
-
-            // Mark invite as used if provided
-            if (inviteCode && inviteCode.trim() !== "") {
-                await AdminInvite.findOneAndUpdate(
-                    { inviteCode: inviteCode.toUpperCase() },
-                    {
-                        $inc: { timesUsed: 1 },
-                        $push: {
-                            usedBy: {
-                                userId: user._id,
-                            },
-                        },
-                    }
-                );
-            }
-
-            res.status(201).json({
-                _id: user._id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                parentAdminId: user.parentAdminId,
-                profileImageUrl: user.profileImageUrl,
-                token: generateToken(user._id),
-                message: "Registration successful!"
+            // New user trying to login via Google - they must create account first
+            return res.status(400).json({ 
+                success: false,
+                message: "Account not found. Please create an account first using the Sign Up page, then you can login with Google." 
             });
         }
     } catch (error) {

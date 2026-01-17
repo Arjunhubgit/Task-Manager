@@ -1,7 +1,7 @@
 const Task = require("../models/Task");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
-const Groq = require("groq-sdk"); // 💡 Using Groq SDK
+const Groq = require("groq-sdk"); // 
 const jwt = require("jsonwebtoken");
 
 // Initialize Groq Client
@@ -285,13 +285,26 @@ const getDashboardData = async (req, res) => {
 const getUserDashboardData = async (req, res) => {
     try {
         const userId = req.user._id; 
+        const now = new Date();
+        const threeDaysFromNow = new Date();
+        threeDaysFromNow.setDate(now.getDate() + 3); // Window for "Upcoming" tasks
+
+        // 1. General Statistics
         const totalTasks = await Task.countDocuments({ assignedTo: userId });
         const pendingTasks = await Task.countDocuments({ assignedTo: userId, status: "Pending" });
         const completedTasks = await Task.countDocuments({ assignedTo: userId, status: "Completed" });
-        const overdueTasks = await Task.countDocuments({ assignedTo: userId, status: { $ne: "Completed" }, dueDate: { $lt: new Date() } });
+        const overdueTasksCount = await Task.countDocuments({ 
+            assignedTo: userId, 
+            status: { $ne: "Completed" }, 
+            dueDate: { $lt: now } 
+        });
         
+        // 2. Chart Distributions
         const taskStatuses = ["Pending", "In Progress", "Completed"];
-        const taskDistributionRaw = await Task.aggregate([{ $match: { assignedTo: userId } }, { $group: { _id: "$status", count: { $sum: 1 } } }]);
+        const taskDistributionRaw = await Task.aggregate([
+            { $match: { assignedTo: userId } }, 
+            { $group: { _id: "$status", count: { $sum: 1 } } }
+        ]);
         const taskDistribution = taskStatuses.reduce((acc, status) => {
             acc[status.replace(/\s+/g, "")] = taskDistributionRaw.find(i => i._id === status)?.count || 0;
             return acc;
@@ -299,16 +312,48 @@ const getUserDashboardData = async (req, res) => {
         taskDistribution["All"] = totalTasks; 
 
         const taskPriorities = ["Low", "Medium", "High"];
-        const taskPriorityLevelsRaw = await Task.aggregate([{ $match: { assignedTo: userId } }, { $group: { _id: "$priority", count: { $sum: 1 } } }]);
+        const taskPriorityLevelsRaw = await Task.aggregate([
+            { $match: { assignedTo: userId } }, 
+            { $group: { _id: "$priority", count: { $sum: 1 } } }
+        ]);
         const taskPriorityLevels = taskPriorities.reduce((acc, priority) => {
             acc[priority] = taskPriorityLevelsRaw.find(i => i._id === priority)?.count || 0;
             return acc;
         }, {});
 
-        const recentTasks = await Task.find({ assignedTo: userId }).sort({ createdAt: -1 }).limit(10)
-            .select("title description status priority dueDate createdAt");
+        // 3. NEW: Urgency Lists
+        // Overdue Tasks List
+        const overdueTasksList = await Task.find({ 
+            assignedTo: userId, 
+            status: { $ne: "Completed" }, 
+            dueDate: { $lt: now } 
+        }).limit(5).select("title dueDate priority aiSummary");
 
-        res.status(200).json({ statistics: { totalTasks, pendingTasks, completedTasks, overdueTasks }, charts: { taskDistribution, taskPriorityLevels }, recentTasks });     
+        // Upcoming Tasks (Next 72 hours)
+        const upcomingTasks = await Task.find({
+            assignedTo: userId,
+            status: { $ne: "Completed" },
+            dueDate: { $gte: now, $lte: threeDaysFromNow }
+        }).sort({ dueDate: 1 }).limit(5).select("title dueDate priority aiSummary");
+
+        // 4. Recent Tasks
+        const recentTasks = await Task.find({ assignedTo: userId })
+            .sort({ createdAt: -1 })
+            .limit(10)
+            .select("title description status priority dueDate createdAt aiSummary");
+
+        res.status(200).json({ 
+            statistics: { 
+                totalTasks, 
+                pendingTasks, 
+                completedTasks, 
+                overdueTasks: overdueTasksCount 
+            }, 
+            charts: { taskDistribution, taskPriorityLevels }, 
+            recentTasks,
+            upcomingTasks,      // NEW
+            overdueTasksList    // NEW
+        });     
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
     }

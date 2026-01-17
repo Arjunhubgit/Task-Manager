@@ -25,7 +25,7 @@ const getStatusTagColor = (status) => {
 // --- END Status Logic ---
 
 const ViewTaskDetails = () => {
-  const { taskId } = useParams(); // Fetches taskId from the route params
+  const { id: taskId } = useParams(); // Fetches taskId from the route params
   
   // 1. State Management
   const [taskInfo, setTaskInfo] = useState(null);

@@ -124,6 +124,26 @@ const UserProvider = ({ children }) => {
         }
     };
 
+    // Delete all notifications
+    const deleteAllNotifications = async () => {
+        if (!user || !user._id) return;
+        
+        setNotifications([]);
+        
+        try {
+            await axiosInstance.delete(API_PATHS.NOTIFICATIONS.DELETE_ALL_NOTIFICATIONS(user._id));
+        } catch (error) {
+            console.error("Error deleting all notifications:", error);
+            // Refresh notifications on error
+            const response = await axiosInstance.get(
+                API_PATHS.NOTIFICATIONS.GET_USER_NOTIFICATIONS(user._id)
+            );
+            if (response.data && response.data.success) {
+                setNotifications(response.data.data);
+            }
+        }
+    };
+
     return (
         <UserContext.Provider value={{ 
             user, 
@@ -133,7 +153,8 @@ const UserProvider = ({ children }) => {
             notifications,
             markNotificationAsRead,
             deleteNotification,
-            markAllNotificationsAsRead
+            markAllNotificationsAsRead,
+            deleteAllNotifications
         }}>
             {children}
         </UserContext.Provider>

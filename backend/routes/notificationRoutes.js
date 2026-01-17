@@ -5,6 +5,7 @@ const {
   markAllNotificationsAsRead,
   deleteNotification,
   getUnreadCount,
+  deleteAllNotifications,
 } = require("../controllers/notificationControllers");
 const { protect } = require("../middlewares/authMiddleware");
 
@@ -29,6 +30,6 @@ router.put("/user/:userId/read-all", markAllNotificationsAsRead);
 router.delete("/:notificationId", deleteNotification);
 
 // Delete all notifications for a user
-router.delete("/user/:userId/delete-all", deleteNotification); // Note: Can be implemented later
+router.delete("/user/:userId/delete-all", deleteAllNotifications);
 
 module.exports = router;

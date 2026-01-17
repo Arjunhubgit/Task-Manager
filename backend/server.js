@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const connectDB = require("./config/db");
+const { startConversationCleanup } = require("./utils/conversationCleanup");
 
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
@@ -42,6 +43,9 @@ app.use("/api/invites", inviteRoutes);
 
 // Server uploads
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// Start conversation cleanup job
+startConversationCleanup();
 
 // --- Socket.io Setup ---
 const http = require("http").createServer(app);

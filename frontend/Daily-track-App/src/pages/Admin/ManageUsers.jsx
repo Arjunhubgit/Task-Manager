@@ -8,6 +8,8 @@ import { LuFileSpreadsheet, LuUserPlus } from 'react-icons/lu'; // Professional 
 import UserCard from '../../components/cards/UserCard'; 
 import Modal from '../../components/Modal'; // Existing Modal component
 import Input from '../../components/inputs/input'; // Existing Input component
+import AdminInviteManager from "../../components/AdminInviteManager";
+
 
 const ManageUsers = () => {
   const [users, setUsers] = useState([]);
@@ -144,7 +146,7 @@ const ManageUsers = () => {
                 <LuUserPlus className="text-lg" />
                 <span>Add Member</span>
               </button>
-
+              
               <button
                 onClick={handleDownloadReport}
                 className="flex items-center gap-2 text-sm font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-4 py-2.5 rounded-xl hover:bg-emerald-500/20 transition-all shadow-[0_0_10px_rgba(16,185,129,0.1)] active:scale-95"
@@ -201,6 +203,10 @@ const ManageUsers = () => {
           </form>
         </Modal>
 
+        <div className="bg-[#1a1a1a]/40 backdrop-blur-xl border border-white/5 rounded-2xl p-4 shadow-lg mb-6">
+            <AdminInviteManager />
+          </div>
+
         {/* --- Content Grid --- */}
         {loading ? (
            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -210,6 +216,7 @@ const ManageUsers = () => {
            </div>
         ) : users.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            
             {users.map((user) => (
               <div
                 key={user._id}
@@ -233,7 +240,7 @@ const ManageUsers = () => {
              <p className="text-gray-400 text-lg">No team members found.</p>
           </div>
         )}
-
+        
       </div>
     </DashboardLayout>
   );

@@ -1,0 +1,123 @@
+/* Reloading Icon Button Styles */
+.reload-icon-button {
+  background: none;
+  border: none;
+  padding: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 6px;
+  transition: all 0.2s ease-in-out;
+  position: relative;
+}
+
+.reload-icon-button:hover:not(:disabled) {
+  background-color: rgba(25, 118, 210, 0.1);
+  transform: scale(1.05);
+}
+
+.reload-icon-button:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.reload-icon-button:disabled,
+.reload-icon-button.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.reload-icon-button.rotating .reload-icon-svg {
+  animation: rotation 1s linear infinite;
+}
+
+/* Size variations */
+.reload-icon-button.reload-icon-small {
+  padding: 4px;
+}
+
+.reload-icon-button.reload-icon-medium {
+  padding: 8px;
+}
+
+.reload-icon-button.reload-icon-large {
+  padding: 12px;
+}
+
+/* Inline variant */
+.reload-icon-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reload-icon-inline.rotating svg {
+  animation: rotation 1s linear infinite;
+}
+
+.reload-icon-inline.reload-icon-small {
+  width: 16px;
+  height: 16px;
+}
+
+.reload-icon-inline.reload-icon-medium {
+  width: 24px;
+  height: 24px;
+}
+
+.reload-icon-inline.reload-icon-large {
+  width: 32px;
+  height: 32px;
+}
+
+/* Rotation animation */
+@keyframes rotation {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Text styling */
+.reload-text {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  animation: fadeInOut 0.5s ease-in-out;
+}
+
+@keyframes fadeInOut {
+  0% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .reload-icon-button {
+    padding: 6px;
+  }
+
+  .reload-icon-button.reload-icon-large {
+    padding: 8px;
+  }
+}
+
+/* Accessibility */
+.reload-icon-button:focus-visible {
+  outline: 2px solid #1976d2;
+  outline-offset: 2px;
+}
+
+.reload-icon-button:focus-visible:not(:disabled) {
+  box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.2);
+}

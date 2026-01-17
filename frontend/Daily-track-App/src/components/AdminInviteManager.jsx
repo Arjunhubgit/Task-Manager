@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FaPlus, FaCopy, FaTrash, FaToggleOn, FaToggleOff, FaClock, FaUser, FaLink } from 'react-icons/fa';
-import axiosInstance from '../../utils/axiosInstance';
+import axiosInstance from '../utils/axiosInstance';
 
 const AdminInviteManager = () => {
   const [invites, setInvites] = useState([]);
@@ -101,7 +101,7 @@ const AdminInviteManager = () => {
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full p-3 bg-[#121212]/50 border border-white/10 rounded-2xl shadow-lg">
       {/* Header */}
       <div className="flex justify-between items-center mb-8">
         <div>

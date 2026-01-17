@@ -10,7 +10,7 @@ router.get("/", protect, adminOrHost, getUsers); // HOST gets their admins, ADMI
 
 // ===== ADMIN ROUTES (Manage Members) =====
 router.post("/", protect, adminOnly, createMember); // ADMIN creates MEMBER
-router.delete("/:id", protect, adminOnly, canManageMember, deleteUser); // ADMIN deletes their member
+router.delete("/:id", protect, adminOrHost, canManageMember, deleteUser); // ADMIN/HOST deletes user
 router.put("/:id", protect, canManageMember, updateUser); // Update user status
 
 // ===== GENERAL ROUTES =====
