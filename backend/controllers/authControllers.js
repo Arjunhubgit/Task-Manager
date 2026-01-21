@@ -181,10 +181,87 @@ const googleLogin = async (req, res) => {
                 token: generateToken(user._id)
             });
         } else {
-            // New user trying to login via Google - they must create account first
-            return res.status(400).json({ 
-                success: false,
-                message: "Account not found. Please create an account first using the Sign Up page, then you can login with Google." 
+            // NEW USER: Create account if they don't exist (Google signup flow)
+            let userRole = "member";
+            let parentAdminId = null;
+
+            // Handle invite code validation for new Google users
+            if (inviteCode && inviteCode.trim() !== "") {
+                const invite = await AdminInvite.findOne({ 
+                    inviteCode: inviteCode.toUpperCase() 
+                });
+
+                if (!invite) {
+                    return res.status(400).json({ message: "Invalid invite code" });
+                }
+
+                if (!invite.isActive) {
+                    return res.status(400).json({ message: "This invite has been deactivated" });
+                }
+
+                // Check if invite has expired
+                if (invite.expiresAt && new Date() > invite.expiresAt) {
+                    await AdminInvite.findByIdAndUpdate(invite._id, { isActive: false });
+                    return res.status(400).json({ message: "This invite has expired" });
+                }
+
+                // Check if max uses has been reached
+                if (invite.maxUses && invite.timesUsed >= invite.maxUses) {
+                    await AdminInvite.findByIdAndUpdate(invite._id, { isActive: false });
+                    return res.status(400).json({ message: "This invite has reached its usage limit" });
+                }
+
+                // All validations passed
+                parentAdminId = invite.adminId;
+                userRole = "member";
+
+                // Mark invite as used
+                await AdminInvite.findByIdAndUpdate(
+                    invite._id,
+                    {
+                        $inc: { timesUsed: 1 },
+                        $push: {
+                            usedBy: {
+                                userId: null, // Will be set after user creation
+                            },
+                        },
+                    }
+                );
+            }
+
+            // Create new Google user
+            user = await User.create({
+                name,
+                email,
+                password: null, // Google users don't have a password
+                profileImageUrl: googlePhotoUrl,
+                googleId: googlePhotoUrl, // Store to identify as Google user
+                role: userRole,
+                parentAdminId,
+                isOnline: true,
+                status: 'online'
+            });
+
+            // Update the invite's usedBy with actual user ID
+            if (inviteCode && inviteCode.trim() !== "" && userRole === "member") {
+                await AdminInvite.updateOne(
+                    { inviteCode: inviteCode.toUpperCase(), "usedBy.userId": null },
+                    { $set: { "usedBy.$[elem].userId": user._id } },
+                    { arrayFilters: [{ "elem.userId": null }] }
+                );
+            }
+
+            res.status(201).json({
+                _id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                profileImageUrl: user.profileImageUrl,
+                parentAdminId: user.parentAdminId,
+                isOnline: true,
+                status: user.status,
+                token: generateToken(user._id),
+                message: "Account created successfully via Google!"
             });
         }
     } catch (error) {

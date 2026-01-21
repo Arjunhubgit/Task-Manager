@@ -1,17 +1,18 @@
 import React, { useState, useCallback, useContext, useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import socket from '../../services/socket';
 import { 
     Search, Send, MoreVertical, Phone, Video, Info, Paperclip, 
     Smile, User as UserIcon, MessageSquare, Check, CheckCheck, 
-    Bell, ChevronLeft, Trash2 
+    Bell, ChevronLeft, Trash2, Copy, Star, Reply, Flag
 } from 'lucide-react';
 import { UserContext } from '../../context/userContext';
 import axiosInstance from '../../utils/axiosInstance';
-import { API_PATHS } from '../../utils/apiPaths';
 import MessagingService from '../../services/messagingService';
 import toast from 'react-hot-toast';
 import DashboardLayout from '../../components/layouts/DashboardLayout';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getImageUrl } from '../../utils/helper';
 
 // --- Animation Variants ---
 const listContainerVariants = {
@@ -45,6 +46,27 @@ const formatMessageDate = (timestamp) => {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
+// --- Status Helper Functions ---
+const getStatusColor = (status) => {
+    switch(status) {
+        case 'online': return 'bg-emerald-500 shadow-lg shadow-emerald-500/60';
+        case 'idle': return 'bg-yellow-500 shadow-lg shadow-yellow-500/60';
+        case 'dnd': return 'bg-red-500 shadow-lg shadow-red-500/60';
+        case 'invisible': return 'bg-gray-600 shadow-lg shadow-gray-600/40';
+        default: return 'bg-gray-500 shadow-lg shadow-gray-500/40';
+    }
+};
+
+const getStatusLabel = (status) => {
+    switch(status) {
+        case 'online': return 'Online';
+        case 'idle': return 'Idle';
+        case 'dnd': return 'Do Not Disturb';
+        case 'invisible': return 'Offline';
+        default: return 'Offline';
+    }
+};
+
 const AdminMessages = () => {
     // --- State & Context ---
     const { user } = useContext(UserContext);
@@ -57,6 +79,11 @@ const AdminMessages = () => {
     const [isLoadingConversations, setIsLoadingConversations] = useState(true);
     const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
     const [showChatOptions, setShowChatOptions] = useState(false); // Dropdown state
+    const [mutedConversations, setMutedConversations] = useState([]); // Track muted conversations
+    const [selectedMessageId, setSelectedMessageId] = useState(null); // For message context menu
+    const [messageContextPos, setMessageContextPos] = useState({ x: 0, y: 0 }); // Context menu position
+    const [starredMessages, setStarredMessages] = useState([]); // Track starred messages
+    const [replyingTo, setReplyingTo] = useState(null); // Reply to message
     
     // --- Refs ---
     const messagesEndRef = useRef(null);
@@ -71,6 +98,13 @@ const AdminMessages = () => {
     useEffect(() => {
         scrollToBottom();
     }, [messages, isOtherUserTyping]);
+
+    // Close context menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = () => setSelectedMessageId(null);
+        document.addEventListener('click', handleClickOutside);
+        return () => document.removeEventListener('click', handleClickOutside);
+    }, []);
 
     // --- Socket.io Logic ---
     useEffect(() => {
@@ -157,6 +191,8 @@ const AdminMessages = () => {
                         participantEmail: otherParticipant.email,
                         participantImage: otherParticipant.profileImageUrl,
                         participantRole: otherParticipant.role,
+                        participantStatus: otherParticipant.status, // Include status
+                        participantIsOnline: otherParticipant.isOnline, // Include online status
                         lastMessage: conv.lastMessage || 'Start a conversation...',
                         timestamp: conv.lastMessageTime || new Date(),
                         unread: conv.unreadCounts?.[user._id] || 0
@@ -173,6 +209,8 @@ const AdminMessages = () => {
                          participantEmail: u.email,
                          participantImage: u.profileImageUrl,
                          participantRole: u.role,
+                         participantStatus: u.status, // Include status
+                         participantIsOnline: u.isOnline, // Include online status
                          lastMessage: 'Start a conversation...',
                          timestamp: new Date(),
                          unread: 0
@@ -228,7 +266,126 @@ const AdminMessages = () => {
         }
     };
 
-    // --- Actions ---
+    // --- Mute/Unmute Chat ---
+    const handleMuteChat = async () => {
+        if (!selectedConversation) return;
+
+        try {
+            const isMuted = mutedConversations.includes(selectedConversation._id);
+            
+            if (isMuted) {
+                // Unmute
+                setMutedConversations(prev => prev.filter(id => id !== selectedConversation._id));
+                // Save to localStorage
+                const saved = JSON.parse(localStorage.getItem('mutedConversations') || '[]');
+                const updated = saved.filter(id => id !== selectedConversation._id);
+                localStorage.setItem('mutedConversations', JSON.stringify(updated));
+                toast.success("Notifications enabled");
+            } else {
+                // Mute
+                setMutedConversations(prev => [...prev, selectedConversation._id]);
+                // Save to localStorage
+                const saved = JSON.parse(localStorage.getItem('mutedConversations') || '[]');
+                localStorage.setItem('mutedConversations', JSON.stringify([...saved, selectedConversation._id]));
+                toast.success("Chat muted - notifications disabled");
+            }
+            setShowChatOptions(false);
+        } catch (error) {
+            toast.error("Failed to update mute status");
+        }
+    };
+
+    // Load muted conversations from localStorage on mount
+    useEffect(() => {
+        const saved = JSON.parse(localStorage.getItem('mutedConversations') || '[]');
+        setMutedConversations(saved);
+        const starred = JSON.parse(localStorage.getItem('starredMessages') || '[]');
+        setStarredMessages(starred);
+    }, []);
+
+    // Message Actions
+    const handleDeleteMessage = async (messageId) => {
+        try {
+            await axiosInstance.delete(`/api/messages/${messageId}`);
+            setMessages(prev => prev.filter(m => m._id !== messageId));
+            toast.success("Message deleted");
+            setSelectedMessageId(null);
+        } catch (error) {
+            toast.error("Failed to delete message");
+        }
+    };
+
+    const handleCopyMessage = (content) => {
+        navigator.clipboard.writeText(content);
+        toast.success("Message copied to clipboard");
+        setSelectedMessageId(null);
+    };
+
+    const handleStarMessage = (messageId) => {
+        if (starredMessages.includes(messageId)) {
+            const updated = starredMessages.filter(id => id !== messageId);
+            setStarredMessages(updated);
+            localStorage.setItem('starredMessages', JSON.stringify(updated));
+            toast.success("Unstarred");
+        } else {
+            const updated = [...starredMessages, messageId];
+            setStarredMessages(updated);
+            localStorage.setItem('starredMessages', JSON.stringify(updated));
+            toast.success("Starred");
+        }
+        setSelectedMessageId(null);
+    };
+
+    const handleReplyMessage = (message) => {
+        setReplyingTo(message);
+        setSelectedMessageId(null);
+        toast.success("Reply mode enabled");
+    };
+
+    const handleForwardMessage = (msg) => {
+        setSelectedMessageId(null);
+        toast.info("Forward feature coming soon");
+    };
+
+    const handlePinMessage = (msg) => {
+        setSelectedMessageId(null);
+        toast.info("Pin feature coming soon");
+    };
+
+    const handleSelectMessage = (msgId) => {
+        setSelectedMessageId(null);
+        toast.info("Selection feature coming soon");
+    };
+
+    const handleReportMessage = (msg) => {
+        setSelectedMessageId(null);
+        toast.success("Message reported");
+    };
+
+    const handleShowContextMenu = (e, messageId) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Calculate menu position with viewport boundary detection
+        let x = e.clientX;
+        let y = e.clientY;
+        const menuWidth = 180; // Approximate menu width
+        const menuHeight = 300; // Approximate menu height
+        
+        // Adjust if menu goes beyond right edge
+        if (x + menuWidth > window.innerWidth) {
+            x = window.innerWidth - menuWidth - 10;
+        }
+        
+        // Adjust if menu goes beyond bottom edge
+        if (y + menuHeight > window.innerHeight) {
+            y = window.innerHeight - menuHeight - 10;
+        }
+        
+        setSelectedMessageId(messageId);
+        setMessageContextPos({ x, y });
+    };
+
     const handleSendMessage = useCallback(async (e) => {
         e.preventDefault();
         if (!messageText.trim() || !selectedConversation) return;
@@ -314,7 +471,8 @@ const AdminMessages = () => {
     );
 
     return (
-        <DashboardLayout activeMenu="Messages">
+        <>
+            <DashboardLayout activeMenu="Messages">
             <div className="flex h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] bg-[#050505] rounded-[30px] border border-white/5 overflow-hidden shadow-2xl relative">
                 
                 {/* --- LEFT SIDEBAR --- */}
@@ -362,12 +520,19 @@ const AdminMessages = () => {
                                 >
                                     <div className="relative flex-shrink-0">
                                         {conv.participantImage ? (
-                                            <img src={conv.participantImage} alt={conv.participantName} className="w-12 h-12 rounded-full object-cover border border-white/10" />
+                                            <img src={getImageUrl(conv.participantImage)} alt={conv.participantName} className="w-12 h-12 rounded-full object-cover border border-white/10" />
                                         ) : (
                                             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-gray-800 to-black border border-white/10 flex items-center justify-center text-gray-400 font-bold">
                                                 {conv.participantName.charAt(0)}
                                             </div>
                                         )}
+                                        {/* Status Indicator */}
+                                        <div className={`
+                                            absolute bottom-0 right-0 z-20 rounded-full border-2 border-[#050505]
+                                            flex items-center justify-center w-3.5 h-3.5 transition-all duration-200
+                                            ${getStatusColor(conv.participantStatus || 'offline')}
+                                        `} title={getStatusLabel(conv.participantStatus || 'offline')} />
+                                        
                                         {/* Unread Badge - Clears instantly on click due to state update */}
                                         <AnimatePresence>
                                             {conv.unread > 0 && (
@@ -423,19 +588,26 @@ const AdminMessages = () => {
 
                                     <div className="relative">
                                         {selectedConversation.participantImage ? (
-                                            <img src={selectedConversation.participantImage} alt={selectedConversation.participantName} className="w-10 h-10 rounded-full object-cover border border-white/10" />
+                                            <img src={getImageUrl(selectedConversation.participantImage)} alt={selectedConversation.participantName} className="w-10 h-10 rounded-full object-cover border border-white/10" />
                                         ) : (
                                             <div className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center text-white font-bold border border-white/10">
                                                 {selectedConversation.participantName.charAt(0)}
                                             </div>
                                         )}
-                                        <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[#0a0a0a] shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                                        {/* Status Indicator */}
+                                        <div className={`
+                                            absolute bottom-0 right-0 z-20 rounded-full border-2 border-[#0a0a0a]
+                                            flex items-center justify-center w-3 h-3 transition-all duration-200
+                                            ${getStatusColor(selectedConversation.participantStatus || 'offline')}
+                                        `} title={getStatusLabel(selectedConversation.participantStatus || 'offline')} />
                                     </div>
                                     <div>
                                         <h3 className="text-sm font-bold text-white tracking-wide">{selectedConversation.participantName}</h3>
                                         <div className="flex items-center gap-1.5">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                            <p className="text-[11px] text-emerald-400 font-medium tracking-wide">Online</p>
+                                            <span className={`w-1.5 h-1.5 rounded-full ${selectedConversation.participantStatus === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-gray-600'}`}></span>
+                                            <p className={`text-[11px] font-medium tracking-wide ${selectedConversation.participantStatus === 'online' ? 'text-emerald-400' : 'text-gray-400'}`}>
+                                                {getStatusLabel(selectedConversation.participantStatus || 'offline')}
+                                            </p>
                                         </div>
                                     </div>
                                 </div>
@@ -478,13 +650,24 @@ const AdminMessages = () => {
                                                                 <span className="text-[10px] text-red-400/60 font-normal">Delete all messages</span>
                                                             </div>
                                                         </button>
-                                                        <button className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-300 hover:text-white hover:bg-white/5 rounded-xl transition-colors group">
-                                                             <div className="p-1.5 bg-white/5 rounded-lg group-hover:bg-white/10 transition-colors">
+                                                        <button 
+                                                            onClick={handleMuteChat}
+                                                            className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-colors group ${
+                                                                mutedConversations.includes(selectedConversation._id)
+                                                                ? 'text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10'
+                                                                : 'text-gray-300 hover:text-white hover:bg-white/5'
+                                                            }`}
+                                                        >
+                                                             <div className={`p-1.5 rounded-lg transition-colors ${
+                                                                mutedConversations.includes(selectedConversation._id)
+                                                                ? 'bg-yellow-500/20'
+                                                                : 'bg-white/5 group-hover:bg-white/10'
+                                                            }`}>
                                                                 <Bell className="w-4 h-4" />
                                                             </div>
                                                             <div className="flex flex-col items-start">
-                                                                <span>Mute</span>
-                                                                <span className="text-[10px] text-gray-500 font-normal">Stop notifications</span>
+                                                                <span>{mutedConversations.includes(selectedConversation._id) ? 'Unmute' : 'Mute'}</span>
+                                                                <span className="text-[10px] text-gray-500 font-normal">{mutedConversations.includes(selectedConversation._id) ? 'Notifications enabled' : 'Stop notifications'}</span>
                                                             </div>
                                                         </button>
                                                     </div>
@@ -504,15 +687,22 @@ const AdminMessages = () => {
 
                                         return (
                                             <motion.div key={msg._id || idx} variants={messageVariants} initial="hidden" animate="visible" className={`flex w-full ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                                <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[85%] md:max-w-[75%]`}>
-                                                    <div className={`px-5 py-3 rounded-2xl shadow-sm backdrop-blur-sm ${isMe ? 'bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-tr-none shadow-orange-500/10' : 'bg-[#1a1a1a] border border-white/10 text-gray-200 rounded-tl-none hover:border-white/20 transition-colors'}`}>
+                                                <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[85%] md:max-w-[75%] group`}>
+                                                    <div 
+                                                        onContextMenu={(e) => handleShowContextMenu(e, msg._id)}
+                                                        onClick={() => setSelectedMessageId(null)}
+                                                        className={`px-5 py-3 rounded-2xl shadow-sm backdrop-blur-sm cursor-context-menu ${isMe ? 'bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-tr-none shadow-orange-500/10' : 'bg-[#1a1a1a] border border-white/10 text-gray-200 rounded-tl-none hover:border-white/20 transition-colors'}`}
+                                                    >
                                                         <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                                                     </div>
                                                     <div className="flex items-center gap-1 mt-1.5 px-1">
                                                         <span className="text-[10px] text-gray-500 font-mono opacity-70">{formatMessageDate(msg.timestamp)}</span>
+                                                        {starredMessages.includes(msg._id) && <span className="text-yellow-500">★</span>}
                                                         {isMe && <CheckCheck className="w-3 h-3 text-orange-500/80 ml-1" />}
                                                     </div>
                                                 </div>
+                                                
+                                                {/* Message Context Menu - Rendered via Portal */}
                                             </motion.div>
                                         );
                                     })}
@@ -565,6 +755,62 @@ const AdminMessages = () => {
                 </div>
             </div>
         </DashboardLayout>
+
+            {/* Context Menu Portal - Render outside scrollable container */}
+            {selectedMessageId && ReactDOM.createPortal(
+                <AnimatePresence>
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="fixed bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl z-[9999] overflow-hidden min-w-max"
+                        style={{ top: `${messageContextPos.y}px`, left: `${messageContextPos.x}px` }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="p-1 space-y-0.5">
+                            {messages.find(m => m._id === selectedMessageId) && (() => {
+                                const msg = messages.find(m => m._id === selectedMessageId);
+                                const senderId = typeof msg.senderId === 'object' ? msg.senderId._id : msg.senderId;
+                                const isMe = senderId === user._id;
+                                return (
+                                    <>
+                                        <button onClick={() => { handleReplyMessage(msg); }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 rounded transition-colors">
+                                            <Reply className="w-3.5 h-3.5" /> Reply
+                                        </button>
+                                        <button onClick={() => handleCopyMessage(msg.content)} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 rounded transition-colors">
+                                            <Copy className="w-3.5 h-3.5" /> Copy
+                                        </button>
+                                        <button onClick={() => handleForwardMessage(msg)} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 rounded transition-colors">
+                                            <MoreVertical className="w-3.5 h-3.5 rotate-90" /> Forward
+                                        </button>
+                                        <button onClick={() => handlePinMessage(msg)} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 rounded transition-colors">
+                                            <Flag className="w-3.5 h-3.5" /> Pin
+                                        </button>
+                                        <div className="h-px bg-white/5 my-0.5"></div>
+                                        <button onClick={() => handleStarMessage(msg._id)} className={`w-full flex items-center gap-2 px-3 py-2 text-xs rounded transition-colors ${starredMessages.includes(msg._id) ? 'text-yellow-400 hover:bg-yellow-500/10' : 'text-gray-300 hover:bg-white/5'}`}>
+                                            <Star className="w-3.5 h-3.5" /> {starredMessages.includes(msg._id) ? 'Unstar' : 'Star'}
+                                        </button>
+                                        <button onClick={() => handleSelectMessage(msg._id)} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 rounded transition-colors">
+                                            <Check className="w-3.5 h-3.5" /> Select
+                                        </button>
+                                        <div className="h-px bg-white/5 my-0.5"></div>
+                                        <button onClick={() => handleReportMessage(msg)} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-orange-400 hover:bg-orange-500/10 rounded transition-colors">
+                                            <Flag className="w-3.5 h-3.5" /> Report
+                                        </button>
+                                        {isMe && (
+                                            <button onClick={() => handleDeleteMessage(msg._id)} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 rounded transition-colors">
+                                                <Trash2 className="w-3.5 h-3.5" /> Delete
+                                            </button>
+                                        )}
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    </motion.div>
+                </AnimatePresence>,
+                document.body
+            )}
+        </>
     );
 };
 

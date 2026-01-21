@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { UserContext } from "../../context/userContext";
 import { SIDE_MENU_DATA, SIDE_MENU_USER_DATA, SIDE_MENU_HOST_DATA } from "../../utils/data";
 import { LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
+import { getImageUrl } from "../../utils/helper";
 
 // --- Sub-Component for Menu Item ---
 const MenuItem = ({ item, activeMenu, onClick, isCollapsed }) => {
@@ -69,8 +70,8 @@ const SideMenu = ({ activeMenu, isMobile, onMobileClose }) => {
     navigate(route);
   }, [handleLogout, navigate]);
 
-  // Dynamic Profile Image
-  const profileImage = user?.profileImageUrl ||
+  // Dynamic Profile Image - Use getImageUrl helper to handle all URL types
+  const profileImage = getImageUrl(user?.profileImageUrl) ||
     "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png";
 
   // --- Unified Menu Body ---

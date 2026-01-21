@@ -7,7 +7,7 @@ exports.getConversations = async (req, res) => {
   try {
     const userId = req.params.userId;
     const conversations = await Conversation.find({ participants: userId })
-      .populate('participants', 'name email profileImageUrl role')
+      .populate('participants', 'name email profileImageUrl role status isOnline lastLogoutTime')
       .sort({ lastMessageTime: -1 });
     res.json(conversations);
   } catch (err) {
@@ -20,8 +20,8 @@ exports.getConversationMessages = async (req, res) => {
   try {
     const { conversationId } = req.params;
     const messages = await Message.find({ conversationId })
-      .populate('senderId', 'name email profileImageUrl role')
-      .populate('recipientId', 'name email profileImageUrl role')
+      .populate('senderId', 'name email profileImageUrl role status isOnline lastLogoutTime')
+      .populate('recipientId', 'name email profileImageUrl role status isOnline lastLogoutTime')
       .sort({ timestamp: 1 });
     res.json(messages);
   } catch (err) {
