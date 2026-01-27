@@ -48,19 +48,27 @@ const adminOrHost = (req, res, next) => {
   }
 };
 
-// Middleware to check if Admin can manage specific member (member belongs to this admin)
+// Middleware to check if user can update a profile (own profile or manage permission)
 const canManageMember = async (req, res, next) => {
   try {
+    const targetUserId = req.params.id;
+    const currentUserId = req.user._id.toString();
+
+    // Allow users to update their own profile
+    if (targetUserId === currentUserId) {
+      return next();
+    }
+
+    // Allow admins to manage their members
     if (req.user.role === "admin") {
-      const memberId = req.params.id;
-      const member = await User.findById(memberId);
+      const member = await User.findById(targetUserId);
       
       if (!member) {
         return res.status(404).json({ message: "Member not found" });
       }
 
       // Check if member belongs to this admin
-      if (member.parentAdminId.toString() !== req.user._id.toString()) {
+      if (member.parentAdminId.toString() !== currentUserId) {
         return res.status(403).json({ message: "You can only manage your own members" });
       }
       next();

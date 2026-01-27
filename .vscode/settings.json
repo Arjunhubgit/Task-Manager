@@ -1,3 +1,13 @@
 {
-    "css.lint.unknownAtRules": "ignore"
+    "css.lint.unknownAtRules": "ignore",
+    "yaml.schemas": {
+        "file:///c%3A/Users/arjun/.vscode/extensions/continue.continue-1.2.11-win32-x64/config-yaml-schema.json": [
+            ".continue/**/*.yaml"
+        ],
+        "file:///c%3A/Users/arjun/.vscode/extensions/continue.continue-1.2.14-win32-x64/config-yaml-schema.json": [
+            ".continue/**/*.yaml",
+            "file:///c%3A/Users/arjun/.continue/config.yaml"
+        ]
+    },
+    "workbench.remoteIndicator.showExtensionRecommendations": false
 }

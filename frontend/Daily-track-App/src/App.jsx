@@ -21,6 +21,8 @@ import ManageTask from './pages/Admin/ManageTask';
 import CreateTask from './pages/Admin/CreateTask';
 import ManageUser from './pages/Admin/ManageUsers';
 import AdminMessages from './pages/Admin/AdminMessages'; // Keeping this as it was in your snippet
+import Reports from './pages/Admin/Reports';
+import TeamPerformance from './pages/Admin/TeamPerformance';
 
 // User Pages
 import UserDashboard from './pages/User/UserDashboard';
@@ -35,6 +37,7 @@ import GlobalUsers from './pages/Host/GlobalUsers';
 import UserDetailPage from './pages/Host/UserDetailPage';
 import GodMode from './pages/Host/GodMode';
 import ReloadingIcon from './components/ReloadingIcon.jsx';
+import AuditLogs from "../src/pages/Host/Auditlogs.jsx";
 
 const App = () => {
   return (
@@ -54,6 +57,8 @@ const App = () => {
             <Route path='admin/create-task' element={<CreateTask />} />
             <Route path='admin/users' element={<ManageUser />} />
             <Route path='admin/messages' element={<AdminMessages />} />
+            <Route path='admin/reports' element={<Reports />} />
+            <Route path='admin/performance' element={<TeamPerformance />} />
           </Route>
 
           {/* User Protected */}
@@ -71,6 +76,7 @@ const App = () => {
             <Route path='host/users' element={<GlobalUsers />} />
             <Route path='host/users/:id' element={<UserDetailPage />} />
             <Route path='host/god-mode' element={<GodMode />} />
+            <Route path="/host/audit-logs" element={<AuditLogs />} />
           </Route>
 
           <Route path='/' element={<Root />} />

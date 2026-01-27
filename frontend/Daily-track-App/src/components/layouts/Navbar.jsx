@@ -10,6 +10,7 @@ import { API_PATHS } from '../../utils/apiPaths';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { getImageUrl } from '../../utils/helper';
+import socket from '../../services/socket';
 
 // --- Static Desktop Links Data ---
 const DESKTOP_LINKS = [
@@ -20,18 +21,22 @@ const DESKTOP_LINKS = [
 ];
 
 const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
-    const { user, clearUser } = useContext(UserContext); // Get user data and logout function
+    const { user, clearUser, updateUserStatus } = useContext(UserContext); // Get user data and logout function
     const [isProfileOpen, setIsProfileOpen] = useState(false);
-    const [userStatus, setUserStatus] = useState('online'); // 'online', 'idle', 'dnd', 'invisible'
+    const [userStatus, setUserStatus] = useState(null); // Will be set from user.status
     const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
     const [isLoadingMessages, setIsLoadingMessages] = useState(false);
     const [messageError, setMessageError] = useState(null);
     const profileRef = useRef(null);
     const navigate = useNavigate();
 
+    // Initialize and update userStatus from user.status whenever user changes
     useEffect(() => {
         if (user?.status) {
             setUserStatus(user.status);
+        } else if (user) {
+            // If user exists but no status, default to online
+            setUserStatus('online');
         }
     }, [user]);
 
@@ -248,6 +253,12 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                                 <button
                                     onClick={async () => {
                                         setUserStatus('online');
+                                        updateUserStatus('online');
+                                        // Emit status update via socket
+                                        socket.emit('updateUserStatus', {
+                                            userId: user._id,
+                                            status: 'online'
+                                        });
                                         // Send status update to backend
                                         try {
                                             await axiosInstance.put(`${API_PATHS.USERS.UPDATE_USER(user._id)}`, {
@@ -270,6 +281,12 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                                 <button
                                     onClick={async () => {
                                         setUserStatus('idle');
+                                        updateUserStatus('idle');
+                                        // Emit status update via socket
+                                        socket.emit('updateUserStatus', {
+                                            userId: user._id,
+                                            status: 'idle'
+                                        });
                                         // Send status update to backend
                                         try {
                                             await axiosInstance.put(`${API_PATHS.USERS.UPDATE_USER(user._id)}`, {
@@ -292,6 +309,12 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                                 <button
                                     onClick={async () => {
                                         setUserStatus('dnd');
+                                        updateUserStatus('dnd');
+                                        // Emit status update via socket
+                                        socket.emit('updateUserStatus', {
+                                            userId: user._id,
+                                            status: 'dnd'
+                                        });
                                         // Send status update to backend
                                         try {
                                             await axiosInstance.put(`${API_PATHS.USERS.UPDATE_USER(user._id)}`, {
@@ -317,6 +340,12 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                                 <button
                                     onClick={async () => {
                                         setUserStatus('invisible');
+                                        updateUserStatus('invisible');
+                                        // Emit status update via socket
+                                        socket.emit('updateUserStatus', {
+                                            userId: user._id,
+                                            status: 'invisible'
+                                        });
                                         // Send status update to backend
                                         try {
                                             await axiosInstance.put(`${API_PATHS.USERS.UPDATE_USER(user._id)}`, {

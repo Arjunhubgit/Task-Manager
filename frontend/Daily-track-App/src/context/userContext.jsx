@@ -71,6 +71,16 @@ const UserProvider = ({ children }) => {
         setLoading(false);
     };
 
+    // Update user status and sync with context
+    const updateUserStatus = (newStatus) => {
+        if (user) {
+            setUser({
+                ...user,
+                status: newStatus
+            });
+        }
+    };
+
     const clearUser = async () => {
     try {
         // 1. Call the logout API first to update the DB status to 'invisible'
@@ -147,7 +157,8 @@ const UserProvider = ({ children }) => {
     return (
         <UserContext.Provider value={{ 
             user, 
-            updateUser, 
+            updateUser,
+            updateUserStatus,
             loading, 
             clearUser,
             notifications,

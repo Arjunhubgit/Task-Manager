@@ -1,5 +1,5 @@
-import { LuActivity, LuLayoutDashboard, LuUsers, LuClipboardCheck, LuSquarePlus, LuLogOut, LuShield } from "react-icons/lu";
-
+import { LuActivity, LuLayoutDashboard, LuUsers, LuClipboardCheck, LuSquarePlus, LuLogOut, LuShield, LuMailOpen, LuSettings, LuFileText, LuTrendingUp, LuBell } from "react-icons/lu";
+import { FaChartColumn,  } from "react-icons/fa6";
 export const SIDE_MENU_DATA = [
   {
     id: "01",
@@ -24,6 +24,30 @@ export const SIDE_MENU_DATA = [
     label: "Team Members",
     icon: LuUsers,
     path: "/admin/users",
+  },
+  {
+    id: "05",
+    label: "Reports & Analytics",
+    icon: FaChartColumn,
+    path: "/admin/reports",
+  },
+  {
+    id: "06",
+    label: "Team Performance",
+    icon: LuTrendingUp,
+    path: "/admin/performance",
+  },
+  {
+    id: "09",
+    label: "Notifications",
+    icon: LuBell,
+    path: "/admin/notifications",
+  },
+  {
+    id: "10",
+    label: "Settings",
+    icon: LuSettings,
+    path: "/admin/settings",
   },
 ];
 

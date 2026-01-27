@@ -1,6 +1,8 @@
 const Task = require("../models/Task");
 const User = require("../models/User");
 const excelJS = require("exceljs");
+const AuditLog = require("../models/AuditLog");
+
 
 // @desc    Exports all tasks report as Excel
 // @route   GET /api/reports/export/tasks
@@ -159,8 +161,26 @@ const exportUsersReport = async (req, res) => {
         res.status(500).json({ message: "Server error", error: error.message });
     }
 };
+
+// @desc    Get all audit logs
+// @route   GET /api/reports/audit-logs
+// @access  Private (Admin)
+const getAuditLogs = async (req, res) => {
+    try {
+        const logs = await AuditLog.find()
+            .populate("adminId", "name email profileImageUrl")
+            .sort({ createdAt: -1 }) // Newest first
+            .limit(100); // Limit to last 100 actions for performance
+
+        res.status(200).json(logs);
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching logs", error: error.message });
+    }
+};
+
 module.exports = {
     exportTasksReport,
-    exportUsersReport
+    exportUsersReport,
+    getAuditLogs
 };
 

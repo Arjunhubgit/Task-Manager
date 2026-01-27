@@ -1,9 +1,9 @@
 import React, { useState, useCallback, useContext, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import socket from '../../services/socket';
-import { 
-    Search, Send, MoreVertical, Phone, Video, Info, Paperclip, 
-    Smile, User as UserIcon, MessageSquare, Check, CheckCheck, 
+import {
+    Search, Send, MoreVertical, Phone, Video, Info, Paperclip,
+    Smile, User as UserIcon, MessageSquare, Check, CheckCheck,
     Bell, ChevronLeft, Trash2, Copy, Star, Reply, Flag
 } from 'lucide-react';
 import { UserContext } from '../../context/userContext';
@@ -13,6 +13,8 @@ import toast from 'react-hot-toast';
 import DashboardLayout from '../../components/layouts/DashboardLayout';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getImageUrl } from '../../utils/helper';
+import Navbar from '../../components/layouts/Navbar';
+import Footer from '../../components/layouts/Footer';
 
 // --- Animation Variants ---
 const listContainerVariants = {
@@ -36,11 +38,11 @@ const formatMessageDate = (timestamp) => {
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
-    
+
     const dateStr = date.toLocaleDateString();
     const yesterdayStr = yesterday.toLocaleDateString();
     const todayStr = today.toLocaleDateString();
-    
+
     if (dateStr === todayStr) return `Today ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
     if (dateStr === yesterdayStr) return `Yesterday ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -48,7 +50,7 @@ const formatMessageDate = (timestamp) => {
 
 // --- Status Helper Functions ---
 const getStatusColor = (status) => {
-    switch(status) {
+    switch (status) {
         case 'online': return 'bg-emerald-500 shadow-lg shadow-emerald-500/60';
         case 'idle': return 'bg-yellow-500 shadow-lg shadow-yellow-500/60';
         case 'dnd': return 'bg-red-500 shadow-lg shadow-red-500/60';
@@ -58,7 +60,7 @@ const getStatusColor = (status) => {
 };
 
 const getStatusLabel = (status) => {
-    switch(status) {
+    switch (status) {
         case 'online': return 'Online';
         case 'idle': return 'Idle';
         case 'dnd': return 'Do Not Disturb';
@@ -84,7 +86,7 @@ const AdminMessages = () => {
     const [messageContextPos, setMessageContextPos] = useState({ x: 0, y: 0 }); // Context menu position
     const [starredMessages, setStarredMessages] = useState([]); // Track starred messages
     const [replyingTo, setReplyingTo] = useState(null); // Reply to message
-    
+
     // --- Refs ---
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -109,15 +111,15 @@ const AdminMessages = () => {
     // --- Socket.io Logic ---
     useEffect(() => {
         if (!user || !user._id) return;
-        
+
         socket.connect();
         socket.emit('join', user._id);
 
         socket.on('receiveMessage', (data) => {
-             // Check if this message belongs to the chat currently open
-            const isCurrentChat = selectedConversation && 
-            (data.conversationId === selectedConversation.conversationId || 
-             data.senderId === selectedConversation.participantId);
+            // Check if this message belongs to the chat currently open
+            const isCurrentChat = selectedConversation &&
+                (data.conversationId === selectedConversation.conversationId ||
+                    data.senderId === selectedConversation.participantId);
 
             // Only add message to view if it's for the current conversation
             if (isCurrentChat) {
@@ -138,7 +140,7 @@ const AdminMessages = () => {
             }
 
             // Always update the conversation list preview
-             setConversations((prev) => {
+            setConversations((prev) => {
                 const updated = prev.map(conv => {
                     // Find the conversation this message belongs to
                     if (conv.participantId === data.senderId || conv.conversationId === data.conversationId) {
@@ -166,9 +168,38 @@ const AdminMessages = () => {
             }
         });
 
+        // Listen for user status changes
+        socket.on('userStatusChanged', (data) => {
+            // data: { userId, status, timestamp }
+            setConversations((prev) => {
+                const updated = prev.map(conv => {
+                    if (conv.participantId === data.userId) {
+                        return {
+                            ...conv,
+                            participantStatus: data.status
+                        };
+                    }
+                    return conv;
+                });
+                return updated;
+            });
+
+            // Update selected conversation if status change is for that user
+            setSelectedConversation((prev) => {
+                if (prev && prev.participantId === data.userId) {
+                    return {
+                        ...prev,
+                        participantStatus: data.status
+                    };
+                }
+                return prev;
+            });
+        });
+
         return () => {
             socket.off('receiveMessage');
             socket.off('typing');
+            socket.off('userStatusChanged');
             socket.disconnect();
         };
     }, [user, selectedConversation]);
@@ -179,7 +210,7 @@ const AdminMessages = () => {
         try {
             setIsLoadingConversations(true);
             const conversations = await MessagingService.getConversations(user._id);
-            
+
             if (Array.isArray(conversations) && conversations.length > 0) {
                 setConversations(conversations.map(conv => {
                     const otherParticipant = conv.participants.find(p => p._id !== user._id) || conv.participants[0];
@@ -199,23 +230,23 @@ const AdminMessages = () => {
                     };
                 }));
             } else {
-                 // Fallback logic remains...
-                 const response = await axiosInstance.get('/api/users/for-messaging');
-                 if (response.data && response.data.users) {
-                     setConversations(response.data.users.map(u => ({
-                         _id: u._id,
-                         participantId: u._id,
-                         participantName: u.name,
-                         participantEmail: u.email,
-                         participantImage: u.profileImageUrl,
-                         participantRole: u.role,
-                         participantStatus: u.status, // Include status
-                         participantIsOnline: u.isOnline, // Include online status
-                         lastMessage: 'Start a conversation...',
-                         timestamp: new Date(),
-                         unread: 0
-                     })));
-                 }
+                // Fallback logic remains...
+                const response = await axiosInstance.get('/api/users/for-messaging');
+                if (response.data && response.data.users) {
+                    setConversations(response.data.users.map(u => ({
+                        _id: u._id,
+                        participantId: u._id,
+                        participantName: u.name,
+                        participantEmail: u.email,
+                        participantImage: u.profileImageUrl,
+                        participantRole: u.role,
+                        participantStatus: u.status, // Include status
+                        participantIsOnline: u.isOnline, // Include online status
+                        lastMessage: 'Start a conversation...',
+                        timestamp: new Date(),
+                        unread: 0
+                    })));
+                }
             }
         } catch (error) {
             console.error('Failed to fetch conversations:', error);
@@ -252,15 +283,15 @@ const AdminMessages = () => {
     const markAsRead = async (conv) => {
         try {
             // A. Immediate UI update
-            setConversations(prev => prev.map(c => 
+            setConversations(prev => prev.map(c =>
                 c._id === conv._id ? { ...c, unread: 0 } : c
             ));
-    
+
             // B. Persistent Backend update
-            await axiosInstance.put(`/api/messages/read/${conv._id}`, { 
-                userId: user._id 
+            await axiosInstance.put(`/api/messages/read/${conv._id}`, {
+                userId: user._id
             });
-            
+
         } catch (error) {
             console.error("Failed to mark read", error);
         }
@@ -272,7 +303,7 @@ const AdminMessages = () => {
 
         try {
             const isMuted = mutedConversations.includes(selectedConversation._id);
-            
+
             if (isMuted) {
                 // Unmute
                 setMutedConversations(prev => prev.filter(id => id !== selectedConversation._id));
@@ -365,23 +396,23 @@ const AdminMessages = () => {
     const handleShowContextMenu = (e, messageId) => {
         e.preventDefault();
         e.stopPropagation();
-        
+
         // Calculate menu position with viewport boundary detection
         let x = e.clientX;
         let y = e.clientY;
         const menuWidth = 180; // Approximate menu width
         const menuHeight = 300; // Approximate menu height
-        
+
         // Adjust if menu goes beyond right edge
         if (x + menuWidth > window.innerWidth) {
             x = window.innerWidth - menuWidth - 10;
         }
-        
+
         // Adjust if menu goes beyond bottom edge
         if (y + menuHeight > window.innerHeight) {
             y = window.innerHeight - menuHeight - 10;
         }
-        
+
         setSelectedMessageId(messageId);
         setMessageContextPos({ x, y });
     };
@@ -389,7 +420,7 @@ const AdminMessages = () => {
     const handleSendMessage = useCallback(async (e) => {
         e.preventDefault();
         if (!messageText.trim() || !selectedConversation) return;
-        
+
         try {
             const payload = {
                 senderId: user._id,
@@ -399,11 +430,11 @@ const AdminMessages = () => {
             if (selectedConversation._id && selectedConversation._id !== selectedConversation.participantId) {
                 payload.conversationId = selectedConversation._id;
             }
-            
+
             const response = await axiosInstance.post('/api/messages/send', payload);
-            
-             // If new conversation, update ID
-             if (!selectedConversation._id || selectedConversation._id === selectedConversation.participantId) {
+
+            // If new conversation, update ID
+            if (!selectedConversation._id || selectedConversation._id === selectedConversation.participantId) {
                 setSelectedConversation(prev => ({
                     ...prev,
                     _id: response.data.conversationId,
@@ -420,7 +451,7 @@ const AdminMessages = () => {
                 conversationId: payload.conversationId || response.data.conversationId,
                 timestamp: new Date()
             });
-            
+
             setMessages(prev => [...prev, {
                 _id: response.data._id || Date.now().toString(),
                 senderId: user._id,
@@ -472,289 +503,288 @@ const AdminMessages = () => {
 
     return (
         <>
-            <DashboardLayout activeMenu="Messages">
-            <div className="flex h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] bg-[#050505] rounded-[30px] border border-white/5 overflow-hidden shadow-2xl relative">
-                
-                {/* --- LEFT SIDEBAR --- */}
-                <div className={`w-full md:w-80 lg:w-96 border-r border-white/5 flex-col bg-[#0a0a0a]/80 backdrop-blur-2xl ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
-                    <div className="p-6 border-b border-white/5 space-y-4">
-                        <div className="flex justify-between items-center">
-                            <h2 className="text-xl font-bold text-white tracking-tight">Chats</h2>
-                            <div className="p-2 bg-white/5 rounded-full border border-white/5 text-gray-400">
-                                <MoreVertical className="w-4 h-4" />
+                <Navbar />
+                {/* <DashboardLayout activeMenu="Messages"> */}
+                <div className="flex h-[calc(100vh-120)] sm:h-[calc(100vh-140)] md:h-[calc(97vh-100px)] bg-[#050505] rounded-lg sm:rounded-2xl md:rounded-[30px] border border-white/5 overflow-hidden shadow-2xl relative">
+
+                    {/* --- LEFT SIDEBAR --- */}
+                    <div className={`w-full sm:w-72 md:w-80 lg:w-96 border-r border-white/5 flex-col bg-[#0a0a0a]/80 backdrop-blur-2xl ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
+                        <div className="p-3 sm:p-4 md:p-6 border-b border-white/5 space-y-3 sm:space-y-4">
+                            <div className="flex justify-between items-center">
+                                <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">Chats</h2>
+                                <div className="p-1.5 sm:p-2 bg-white/5 rounded-full border border-white/5 text-gray-400">
+                                    <MoreVertical className="w-3 sm:w-4 h-3 sm:h-4" />
+                                </div>
+                            </div>
+                            <div className="relative group">
+                                <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 w-3.5 sm:w-4 h-3.5 sm:h-4 text-gray-500" />
+                                <input
+                                    type="text"
+                                    placeholder="Search people..."
+                                    className="w-full bg-[#151515] border border-white/5 rounded-lg sm:rounded-xl py-2 sm:py-3 pl-8 sm:pl-10 pr-3 sm:pr-4 text-xs sm:text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500/30 transition-all"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                />
                             </div>
                         </div>
-                        <div className="relative group">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                            <input 
-                                type="text"
-                                placeholder="Search people..."
-                                className="w-full bg-[#151515] border border-white/5 rounded-xl py-3 pl-10 pr-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500/30 transition-all"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
-                    </div>
 
-                    <motion.div variants={listContainerVariants} initial="visible" animate="visible" className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
-                        {isLoadingConversations ? (
-                             <div className="flex flex-col items-center justify-center h-40 space-y-3">
-                                <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
-                                <p className="text-xs text-gray-500 font-medium">Loading conversations...</p>
-                             </div>
-                        ) : filteredConversations.length > 0 ? (
-                            filteredConversations.map((conv) => (
-                                <motion.button
-                                    key={conv._id}
-                                    variants={listItemVariants}
-                                    // UPDATED: Calls markAsRead if there are unread messages
-                                    onClick={() => {
-                                        setSelectedConversation(conv);
-                                        if (conv.unread > 0) markAsRead(conv);
-                                    }}
-                                    className={`w-full flex items-center gap-4 p-3 rounded-2xl transition-all relative group ${
-                                        selectedConversation?._id === conv._id 
-                                        ? 'bg-gradient-to-r from-orange-500/10 to-transparent border border-orange-500/10' 
-                                        : 'hover:bg-white/5 border border-transparent'
-                                    }`}
-                                >
-                                    <div className="relative flex-shrink-0">
-                                        {conv.participantImage ? (
-                                            <img src={getImageUrl(conv.participantImage)} alt={conv.participantName} className="w-12 h-12 rounded-full object-cover border border-white/10" />
-                                        ) : (
-                                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-gray-800 to-black border border-white/10 flex items-center justify-center text-gray-400 font-bold">
-                                                {conv.participantName.charAt(0)}
-                                            </div>
-                                        )}
-                                        {/* Status Indicator */}
-                                        <div className={`
+                        <motion.div variants={listContainerVariants} initial="visible" animate="visible" className="flex-1 overflow-y-auto custom-scrollbar p-2 sm:p-3 space-y-1.5 sm:space-y-2">
+                            {isLoadingConversations ? (
+                                <div className="flex flex-col items-center justify-center h-40 space-y-3">
+                                    <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+                                    <p className="text-xs text-gray-500 font-medium">Loading conversations...</p>
+                                </div>
+                            ) : filteredConversations.length > 0 ? (
+                                filteredConversations.map((conv) => (
+                                    <motion.button
+                                        key={conv._id}
+                                        variants={listItemVariants}
+                                        // UPDATED: Calls markAsRead if there are unread messages
+                                        onClick={() => {
+                                            setSelectedConversation(conv);
+                                            if (conv.unread > 0) markAsRead(conv);
+                                        }}
+                                        className={`w-full flex items-center gap-2 sm:gap-4 p-2 sm:p-3 rounded-lg sm:rounded-2xl transition-all relative group ${selectedConversation?._id === conv._id
+                                                ? 'bg-gradient-to-r from-orange-500/10 to-transparent border border-orange-500/10'
+                                                : 'hover:bg-white/5 border border-transparent'
+                                            }`}
+                                    >
+                                        <div className="relative flex-shrink-0">
+                                            {conv.participantImage ? (
+                                                <img src={getImageUrl(conv.participantImage)} alt={conv.participantName} className="w-10 sm:w-12 h-10 sm:h-12 rounded-full object-cover border border-white/10" />
+                                            ) : (
+                                                <div className="w-10 sm:w-12 h-10 sm:h-12 rounded-full bg-gradient-to-br from-gray-800 to-black border border-white/10 flex items-center justify-center text-gray-400 font-bold text-sm sm:text-base">
+                                                    {conv.participantName.charAt(0)}
+                                                </div>
+                                            )}
+                                            {/* Status Indicator */}
+                                            <div className={`
                                             absolute bottom-0 right-0 z-20 rounded-full border-2 border-[#050505]
                                             flex items-center justify-center w-3.5 h-3.5 transition-all duration-200
                                             ${getStatusColor(conv.participantStatus || 'offline')}
                                         `} title={getStatusLabel(conv.participantStatus || 'offline')} />
-                                        
-                                        {/* Unread Badge - Clears instantly on click due to state update */}
-                                        <AnimatePresence>
-                                            {conv.unread > 0 && (
-                                                <motion.span 
-                                                    initial={{ scale: 0 }}
-                                                    animate={{ scale: 1 }}
-                                                    exit={{ scale: 0 }}
-                                                    className="absolute -top-1 -right-1 w-5 h-5 bg-orange-500 rounded-full text-white text-[10px] flex items-center justify-center font-bold shadow-lg border border-[#0a0a0a]"
-                                                >
-                                                    {conv.unread}
-                                                </motion.span>
-                                            )}
-                                        </AnimatePresence>
-                                    </div>
-                                    
-                                    <div className="flex-1 text-left min-w-0">
-                                        <div className="flex justify-between items-center mb-0.5">
-                                            <h4 className={`text-sm font-semibold truncate ${selectedConversation?._id === conv._id ? 'text-white' : 'text-gray-300 group-hover:text-white'}`}>
-                                                {conv.participantName}
-                                            </h4>
-                                            <span className="text-[10px] text-gray-600 font-mono">
-                                                {new Date(conv.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            </span>
+
+                                            {/* Unread Badge - Clears instantly on click due to state update */}
+                                            <AnimatePresence>
+                                                {conv.unread > 0 && (
+                                                    <motion.span
+                                                        initial={{ scale: 0 }}
+                                                        animate={{ scale: 1 }}
+                                                        exit={{ scale: 0 }}
+                                                        className="absolute -top-1 -right-1 w-5 h-5 bg-orange-500 rounded-full text-white text-[10px] flex items-center justify-center font-bold shadow-lg border border-[#0a0a0a]"
+                                                    >
+                                                        {conv.unread}
+                                                    </motion.span>
+                                                )}
+                                            </AnimatePresence>
                                         </div>
-                                        <p className={`text-xs truncate ${conv.unread > 0 ? 'text-white font-medium' : 'text-gray-500'}`}>
-                                            {conv.lastMessage}
-                                        </p>
-                                    </div>
-                                    {selectedConversation?._id === conv._id && (
-                                        <motion.div layoutId="active-bar" className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-orange-500 rounded-r-full shadow-[0_0_10px_rgba(249,115,22,0.5)]" />
-                                    )}
-                                </motion.button>
-                            ))
-                        ) : (
-                            <div className="flex flex-col items-center justify-center h-full text-gray-500 opacity-50">
-                                <MessageSquare className="w-10 h-10 mb-2" />
-                                <p className="text-xs">No conversations found</p>
-                            </div>
-                        )}
-                    </motion.div>
-                </div>
 
-                {/* --- RIGHT CHAT AREA --- */}
-                <div className={`flex-1 flex-col bg-[#050505] relative z-0 ${selectedConversation ? 'flex' : 'hidden md:flex'}`}>
-                    {selectedConversation ? (
-                        <>
-                            {/* Chat Header */}
-                            <div className="h-20 px-6 border-b border-white/5 flex items-center justify-between bg-[#0a0a0a]/50 backdrop-blur-md relative z-50">
-                                <div className="flex items-center gap-4">
-                                    <button onClick={() => setSelectedConversation(null)} className="md:hidden p-2 -ml-2 text-gray-400 hover:text-white transition-colors">
-                                        <ChevronLeft className="w-6 h-6" />
-                                    </button>
-
-                                    <div className="relative">
-                                        {selectedConversation.participantImage ? (
-                                            <img src={getImageUrl(selectedConversation.participantImage)} alt={selectedConversation.participantName} className="w-10 h-10 rounded-full object-cover border border-white/10" />
-                                        ) : (
-                                            <div className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center text-white font-bold border border-white/10">
-                                                {selectedConversation.participantName.charAt(0)}
+                                        <div className="flex-1 text-left min-w-0">
+                                            <div className="flex justify-between items-center mb-0.5 gap-2">
+                                                <h4 className={`text-xs sm:text-sm font-semibold truncate ${selectedConversation?._id === conv._id ? 'text-white' : 'text-gray-300 group-hover:text-white'}`}>
+                                                    {conv.participantName}
+                                                </h4>
+                                                <span className="text-[8px] sm:text-[10px] text-gray-600 font-mono flex-shrink-0">
+                                                    {new Date(conv.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                </span>
                                             </div>
+                                            <p className={`text-[10px] sm:text-xs truncate ${conv.unread > 0 ? 'text-white font-medium' : 'text-gray-500'}`}>
+                                                {conv.lastMessage}
+                                            </p>
+                                        </div>
+                                        {selectedConversation?._id === conv._id && (
+                                            <motion.div layoutId="active-bar" className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-orange-500 rounded-r-full shadow-[0_0_10px_rgba(249,115,22,0.5)]" />
                                         )}
-                                        {/* Status Indicator */}
-                                        <div className={`
+                                    </motion.button>
+                                ))
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full text-gray-500 opacity-50">
+                                    <MessageSquare className="w-10 h-10 mb-2" />
+                                    <p className="text-xs">No conversations found</p>
+                                </div>
+                            )}
+                        </motion.div>
+                    </div>
+
+                    {/* --- RIGHT CHAT AREA --- */}
+                    <div className={`flex-1 flex-col bg-[#050505] relative z-0 ${selectedConversation ? 'flex' : 'hidden md:flex'}`}>
+                        {selectedConversation ? (
+                            <>
+                                {/* Chat Header */}
+                                <div className="h-16 sm:h-20 px-3 sm:px-6 border-b border-white/5 flex items-center justify-between bg-[#0a0a0a]/50 backdrop-blur-md relative z-50">
+                                    <div className="flex items-center gap-2 sm:gap-4">
+                                        <button onClick={() => setSelectedConversation(null)} className="md:hidden p-1.5 -ml-1.5 text-gray-400 hover:text-white transition-colors">
+                                            <ChevronLeft className="w-5 sm:w-6 h-5 sm:h-6" />
+                                        </button>
+
+                                        <div className="relative">
+                                            {selectedConversation.participantImage ? (
+                                                <img src={getImageUrl(selectedConversation.participantImage)} alt={selectedConversation.participantName} className="w-8 sm:w-10 h-8 sm:h-10 rounded-full object-cover border border-white/10" />
+                                            ) : (
+                                                <div className="w-8 sm:w-10 h-8 sm:h-10 rounded-full bg-gray-800 flex items-center justify-center text-white font-bold border border-white/10 text-xs sm:text-sm">
+                                                    {selectedConversation.participantName.charAt(0)}
+                                                </div>
+                                            )}
+                                            {/* Status Indicator */}
+                                            <div className={`
                                             absolute bottom-0 right-0 z-20 rounded-full border-2 border-[#0a0a0a]
                                             flex items-center justify-center w-3 h-3 transition-all duration-200
                                             ${getStatusColor(selectedConversation.participantStatus || 'offline')}
                                         `} title={getStatusLabel(selectedConversation.participantStatus || 'offline')} />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-sm font-bold text-white tracking-wide">{selectedConversation.participantName}</h3>
-                                        <div className="flex items-center gap-1.5">
-                                            <span className={`w-1.5 h-1.5 rounded-full ${selectedConversation.participantStatus === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-gray-600'}`}></span>
-                                            <p className={`text-[11px] font-medium tracking-wide ${selectedConversation.participantStatus === 'online' ? 'text-emerald-400' : 'text-gray-400'}`}>
-                                                {getStatusLabel(selectedConversation.participantStatus || 'offline')}
-                                            </p>
+                                        </div>
+                                        <div>
+                                            <h3 className="text-xs sm:text-sm font-bold text-white tracking-wide truncate">{selectedConversation.participantName}</h3>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className={`w-1 sm:w-1.5 h-1 sm:h-1.5 rounded-full ${selectedConversation.participantStatus === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-gray-600'}`}></span>
+                                                <p className={`text-[9px] sm:text-[11px] font-medium tracking-wide ${selectedConversation.participantStatus === 'online' ? 'text-emerald-400' : 'text-gray-400'}`}>
+                                                    {getStatusLabel(selectedConversation.participantStatus || 'offline')}
+                                                </p>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                    <button className="hidden sm:block p-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"><Phone className="w-4 h-4" /></button>
-                                    <button className="hidden sm:block p-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"><Video className="w-4 h-4" /></button>
-                                    <div className="hidden sm:block w-px h-6 bg-white/10 mx-2"></div>
-                                    
-                                    {/* --- DROPDOWN MENU --- */}
-                                    <div className="relative z-50">
-                                        <button 
-                                            onClick={() => setShowChatOptions(!showChatOptions)}
-                                            className={`p-2.5 rounded-xl transition-all duration-200 border border-transparent ${
-                                                showChatOptions 
-                                                ? 'bg-orange-500/10 text-orange-500 border-orange-500/20' 
-                                                : 'text-gray-400 hover:text-white hover:bg-white/5'
-                                            }`}
-                                        >
-                                            <Info className="w-4 h-4" />
-                                        </button>
-                                        <AnimatePresence>
-                                            {showChatOptions && (
-                                                <motion.div 
-                                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                    className="absolute right-0 top-full mt-2 w-56 bg-[#121212] border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 origin-top-right"
-                                                >
-                                                    <div className="p-1.5 space-y-1">
-                                                        <div className="px-3 py-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Chat Settings</div>
-                                                        <button 
-                                                            onClick={handleClearChat}
-                                                            className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl transition-colors group"
-                                                        >
-                                                            <div className="p-1.5 bg-red-500/10 rounded-lg group-hover:bg-red-500/20 transition-colors">
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </div>
-                                                            <div className="flex flex-col items-start">
-                                                                <span>Clear Chat</span>
-                                                                <span className="text-[10px] text-red-400/60 font-normal">Delete all messages</span>
-                                                            </div>
-                                                        </button>
-                                                        <button 
-                                                            onClick={handleMuteChat}
-                                                            className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-colors group ${
-                                                                mutedConversations.includes(selectedConversation._id)
-                                                                ? 'text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10'
-                                                                : 'text-gray-300 hover:text-white hover:bg-white/5'
-                                                            }`}
-                                                        >
-                                                             <div className={`p-1.5 rounded-lg transition-colors ${
-                                                                mutedConversations.includes(selectedConversation._id)
-                                                                ? 'bg-yellow-500/20'
-                                                                : 'bg-white/5 group-hover:bg-white/10'
-                                                            }`}>
-                                                                <Bell className="w-4 h-4" />
-                                                            </div>
-                                                            <div className="flex flex-col items-start">
-                                                                <span>{mutedConversations.includes(selectedConversation._id) ? 'Unmute' : 'Mute'}</span>
-                                                                <span className="text-[10px] text-gray-500 font-normal">{mutedConversations.includes(selectedConversation._id) ? 'Notifications enabled' : 'Stop notifications'}</span>
-                                                            </div>
-                                                        </button>
-                                                    </div>
-                                                </motion.div>
-                                            )}
-                                        </AnimatePresence>
-                                    </div>
-                                </div>
-                            </div>
+                                    <div className="flex items-center gap-1">
+                                        <button className="hidden sm:block p-1.5 md:p-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg md:rounded-xl transition-all"><Phone className="w-3.5 md:w-4 h-3.5 md:h-4" /></button>
+                                        <button className="hidden sm:block p-1.5 md:p-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg md:rounded-xl transition-all"><Video className="w-3.5 md:w-4 h-3.5 md:h-4" /></button>
+                                        <div className="hidden sm:block w-px h-5 md:h-6 bg-white/10 mx-1 md:mx-2"></div>
 
-                            {/* Messages List Area */}
-                            <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-orange-500/5 via-transparent to-transparent relative z-0">
-                                <AnimatePresence initial={false}>
-                                    {messages.map((msg, idx) => {
-                                        const senderId = typeof msg.senderId === 'object' ? msg.senderId._id : msg.senderId;
-                                        const isMe = senderId === user._id;
-
-                                        return (
-                                            <motion.div key={msg._id || idx} variants={messageVariants} initial="hidden" animate="visible" className={`flex w-full ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                                <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[85%] md:max-w-[75%] group`}>
-                                                    <div 
-                                                        onContextMenu={(e) => handleShowContextMenu(e, msg._id)}
-                                                        onClick={() => setSelectedMessageId(null)}
-                                                        className={`px-5 py-3 rounded-2xl shadow-sm backdrop-blur-sm cursor-context-menu ${isMe ? 'bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-tr-none shadow-orange-500/10' : 'bg-[#1a1a1a] border border-white/10 text-gray-200 rounded-tl-none hover:border-white/20 transition-colors'}`}
+                                        {/* --- DROPDOWN MENU --- */}
+                                        <div className="relative z-50">
+                                            <button
+                                                onClick={() => setShowChatOptions(!showChatOptions)}
+                                                className={`p-1.5 md:p-2.5 rounded-lg md:rounded-xl transition-all duration-200 border border-transparent ${showChatOptions
+                                                        ? 'bg-orange-500/10 text-orange-500 border-orange-500/20'
+                                                        : 'text-gray-400 hover:text-white hover:bg-white/5'
+                                                    }`}
+                                            >
+                                                <Info className="w-3.5 md:w-4 h-3.5 md:h-4" />
+                                            </button>
+                                            <AnimatePresence>
+                                                {showChatOptions && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                        className="absolute right-0 top-full mt-2 w-48 sm:w-56 bg-[#121212] border border-white/10 rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden z-50 origin-top-right"
                                                     >
-                                                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                                                    </div>
-                                                    <div className="flex items-center gap-1 mt-1.5 px-1">
-                                                        <span className="text-[10px] text-gray-500 font-mono opacity-70">{formatMessageDate(msg.timestamp)}</span>
-                                                        {starredMessages.includes(msg._id) && <span className="text-yellow-500">★</span>}
-                                                        {isMe && <CheckCheck className="w-3 h-3 text-orange-500/80 ml-1" />}
-                                                    </div>
-                                                </div>
-                                                
-                                                {/* Message Context Menu - Rendered via Portal */}
-                                            </motion.div>
-                                        );
-                                    })}
-                                </AnimatePresence>
-                                {isOtherUserTyping && (
-                                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex justify-start w-full">
-                                        <div className="bg-[#1a1a1a] border border-white/10 px-4 py-3 rounded-2xl rounded-tl-none flex items-center gap-1.5">
-                                            <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                                            <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                                            <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce"></span>
+                                                        <div className="p-1 sm:p-1.5 space-y-0.5 sm:space-y-1">
+                                                            <div className="px-2 sm:px-3 py-1.5 sm:py-2 text-[9px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider">Chat Settings</div>
+                                                            <button
+                                                                onClick={handleClearChat}
+                                                                className="w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2.5 text-xs sm:text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg sm:rounded-xl transition-colors group"
+                                                            >
+                                                                <div className="p-1 sm:p-1.5 bg-red-500/10 rounded-lg group-hover:bg-red-500/20 transition-colors flex-shrink-0">
+                                                                    <Trash2 className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+                                                                </div>
+                                                                <div className="flex flex-col items-start">
+                                                                    <span className="truncate">Clear Chat</span>
+                                                                    <span className="text-[8px] sm:text-[10px] text-red-400/60 font-normal">Delete all messages</span>
+                                                                </div>
+                                                            </button>
+                                                            <button
+                                                                onClick={handleMuteChat}
+                                                                className={`w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2.5 text-xs sm:text-sm font-medium rounded-lg sm:rounded-xl transition-colors group ${mutedConversations.includes(selectedConversation._id)
+                                                                        ? 'text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10'
+                                                                        : 'text-gray-300 hover:text-white hover:bg-white/5'
+                                                                    }`}
+                                                            >
+                                                                <div className={`p-1 sm:p-1.5 rounded-lg transition-colors flex-shrink-0 ${mutedConversations.includes(selectedConversation._id)
+                                                                        ? 'bg-yellow-500/20'
+                                                                        : 'bg-white/5 group-hover:bg-white/10'
+                                                                    }`}>
+                                                                    <Bell className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+                                                                </div>
+                                                                <div className="flex flex-col items-start min-w-0">
+                                                                    <span className="truncate">{mutedConversations.includes(selectedConversation._id) ? 'Unmute' : 'Mute'}</span>
+                                                                    <span className="text-[8px] sm:text-[10px] text-gray-500 font-normal truncate">{mutedConversations.includes(selectedConversation._id) ? 'Notifications enabled' : 'Stop notifications'}</span>
+                                                                </div>
+                                                            </button>
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
                                         </div>
-                                    </motion.div>
-                                )}
-                                <div ref={messagesEndRef} />
-                            </div>
-
-                            {/* Message Input Area */}
-                            <div className="p-4 bg-[#0a0a0a]/80 backdrop-blur-xl border-t border-white/5 relative z-10">
-                                <form onSubmit={handleSendMessage} className="flex items-end gap-2 bg-[#151515] border border-white/10 rounded-2xl p-2 focus-within:border-orange-500/40 focus-within:bg-[#1a1a1a] transition-all shadow-lg">
-                                    <div className="flex pb-1">
-                                        <input ref={fileInputRef} type="file" className="hidden" />
-                                        <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors"><Paperclip className="w-5 h-5" /></button>
-                                        <button type="button" className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors"><Smile className="w-5 h-5" /></button>
                                     </div>
-                                    <textarea 
-                                        className="flex-1 bg-transparent text-sm text-white placeholder-gray-500 focus:outline-none py-3 max-h-32 resize-none custom-scrollbar"
-                                        placeholder="Type a message..." rows="1" value={messageText} onChange={handleTyping}
-                                        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); } }} 
-                                    />
-                                    <div className="pb-1 pr-1">
-                                        <button type="submit" disabled={!messageText.trim()} className="p-3 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl shadow-lg shadow-orange-500/20 transition-all active:scale-95 flex items-center justify-center"><Send className="w-4 h-4" /></button>
-                                    </div>
-                                </form>
-                            </div>
-                        </>
-                    ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#1a1a1a] to-[#050505]">
-                            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', duration: 0.8 }} className="relative group cursor-pointer">
-                                <div className="absolute inset-0 bg-orange-500/20 blur-3xl rounded-full group-hover:bg-orange-500/30 transition-all duration-500" />
-                                <div className="w-24 h-24 rounded-[2rem] bg-gradient-to-br from-[#1a1a1a] to-black border border-white/10 flex items-center justify-center relative shadow-2xl group-hover:scale-105 transition-transform duration-300">
-                                    <MessageSquare className="w-10 h-10 text-orange-500/80" />
                                 </div>
-                            </motion.div>
-                            <div className="text-center mt-8 space-y-2">
-                                <h3 className="text-2xl font-bold text-white tracking-tight">Your Workspace Messages</h3>
-                                <p className="text-gray-500 text-sm max-w-sm mx-auto leading-relaxed">Select a conversation from the sidebar or start a new chat to collaborate with your team in real-time.</p>
+
+                                {/* Messages List Area */}
+                                <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 custom-scrollbar bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-orange-500/5 via-transparent to-transparent relative z-0">
+                                    <AnimatePresence initial={false}>
+                                        {messages.map((msg, idx) => {
+                                            const senderId = typeof msg.senderId === 'object' ? msg.senderId._id : msg.senderId;
+                                            const isMe = senderId === user._id;
+
+                                            return (
+                                                <motion.div key={msg._id || idx} variants={messageVariants} initial="hidden" animate="visible" className={`flex w-full ${isMe ? 'justify-end' : 'justify-start'}`}>
+                                                    <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[90%] sm:max-w-[85%] md:max-w-[75%] group`}>
+                                                        <div
+                                                            onContextMenu={(e) => handleShowContextMenu(e, msg._id)}
+                                                            onClick={() => setSelectedMessageId(null)}
+                                                            className={`px-3 sm:px-4 md:px-5 py-2 sm:py-2.5 md:py-3 rounded-lg sm:rounded-2xl shadow-sm backdrop-blur-sm cursor-context-menu text-xs sm:text-sm ${isMe ? 'bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-tr-none shadow-orange-500/10' : 'bg-[#1a1a1a] border border-white/10 text-gray-200 rounded-tl-none hover:border-white/20 transition-colors'}`}
+                                                        >
+                                                            <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                                                        </div>
+                                                        <div className="flex items-center gap-1 mt-1 px-1">
+                                                            <span className="text-[8px] sm:text-[10px] text-gray-500 font-mono opacity-70">{formatMessageDate(msg.timestamp)}</span>
+                                                            {starredMessages.includes(msg._id) && <span className="text-yellow-500 text-xs sm:text-sm">★</span>}
+                                                            {isMe && <CheckCheck className="w-2.5 sm:w-3 h-2.5 sm:h-3 text-orange-500/80 ml-1" />}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Message Context Menu - Rendered via Portal */}
+                                                </motion.div>
+                                            );
+                                        })}
+                                    </AnimatePresence>
+                                    {isOtherUserTyping && (
+                                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex justify-start w-full">
+                                            <div className="bg-[#1a1a1a] border border-white/10 px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-2xl rounded-tl-none flex items-center gap-1.5">
+                                                <span className="w-1 sm:w-1.5 h-1 sm:h-1.5 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                                                <span className="w-1 sm:w-1.5 h-1 sm:h-1.5 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                                                <span className="w-1 sm:w-1.5 h-1 sm:h-1.5 bg-gray-500 rounded-full animate-bounce"></span>
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                    <div ref={messagesEndRef} />
+                                </div>
+
+                                {/* Message Input Area */}
+                                <div className="p-2 sm:p-3 md:p-4 bg-[#0a0a0a]/80 backdrop-blur-xl border-t border-white/5 relative z-10">
+                                    <form onSubmit={handleSendMessage} className="flex items-end gap-1.5 sm:gap-2 bg-[#151515] border border-white/10 rounded-lg sm:rounded-2xl p-1.5 sm:p-2 focus-within:border-orange-500/40 focus-within:bg-[#1a1a1a] transition-all shadow-lg">
+                                        <div className="flex pb-0.5 sm:pb-1">
+                                            <input ref={fileInputRef} type="file" className="hidden" />
+                                            <button type="button" onClick={() => fileInputRef.current?.click()} className="p-1.5 sm:p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg sm:rounded-xl transition-colors"><Paperclip className="w-4 sm:w-5 h-4 sm:h-5" /></button>
+                                            <button type="button" className="p-1.5 sm:p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg sm:rounded-xl transition-colors"><Smile className="w-4 sm:w-5 h-4 sm:h-5" /></button>
+                                        </div>
+                                        <textarea
+                                            className="flex-1 bg-transparent text-xs sm:text-sm text-white placeholder-gray-500 focus:outline-none py-2 sm:py-3 max-h-32 resize-none custom-scrollbar"
+                                            placeholder="Type a message..." rows="1" value={messageText} onChange={handleTyping}
+                                            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); } }}
+                                        />
+                                        <div className="pb-0.5 sm:pb-1 pr-0.5 sm:pr-1">
+                                            <button type="submit" disabled={!messageText.trim()} className="p-2 sm:p-3 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-lg sm:rounded-xl shadow-lg shadow-orange-500/20 transition-all active:scale-95 flex items-center justify-center"><Send className="w-3.5 sm:w-4 h-3.5 sm:h-4" /></button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#1a1a1a] to-[#050505]">
+                                <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', duration: 0.8 }} className="relative group cursor-pointer">
+                                    <div className="absolute inset-0 bg-orange-500/20 blur-3xl rounded-full group-hover:bg-orange-500/30 transition-all duration-500" />
+                                    <div className="w-16 sm:w-24 h-16 sm:h-24 rounded-2xl sm:rounded-[2rem] bg-gradient-to-br from-[#1a1a1a] to-black border border-white/10 flex items-center justify-center relative shadow-2xl group-hover:scale-105 transition-transform duration-300">
+                                        <MessageSquare className="w-6 sm:w-10 h-6 sm:h-10 text-orange-500/80" />
+                                    </div>
+                                </motion.div>
+                                <div className="text-center mt-4 sm:mt-8 space-y-2">
+                                    <h3 className="text-lg sm:text-2xl font-bold text-white tracking-tight">Your Workspace Messages</h3>
+                                    <p className="text-gray-500 text-xs sm:text-sm max-w-xs sm:max-w-sm mx-auto leading-relaxed">Select a conversation from the sidebar or start a new chat to collaborate with your team in real-time.</p>
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
-            </div>
-        </DashboardLayout>
+                <Footer />
+            
+            {/* </DashboardLayout> */}
 
             {/* Context Menu Portal - Render outside scrollable container */}
             {selectedMessageId && ReactDOM.createPortal(
@@ -763,43 +793,43 @@ const AdminMessages = () => {
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.95 }}
-                        className="fixed bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl z-[9999] overflow-hidden min-w-max"
+                        className="fixed bg-[#1a1a1a] border border-white/10 rounded-lg sm:rounded-xl shadow-2xl z-[9999] overflow-hidden min-w-max text-xs sm:text-sm"
                         style={{ top: `${messageContextPos.y}px`, left: `${messageContextPos.x}px` }}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="p-1 space-y-0.5">
+                        <div className="p-0.5 sm:p-1 space-y-0.5">
                             {messages.find(m => m._id === selectedMessageId) && (() => {
                                 const msg = messages.find(m => m._id === selectedMessageId);
                                 const senderId = typeof msg.senderId === 'object' ? msg.senderId._id : msg.senderId;
                                 const isMe = senderId === user._id;
                                 return (
                                     <>
-                                        <button onClick={() => { handleReplyMessage(msg); }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 rounded transition-colors">
-                                            <Reply className="w-3.5 h-3.5" /> Reply
+                                        <button onClick={() => { handleReplyMessage(msg); }} className="w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-gray-300 hover:bg-white/5 rounded transition-colors">
+                                            <Reply className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> Reply
                                         </button>
-                                        <button onClick={() => handleCopyMessage(msg.content)} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 rounded transition-colors">
-                                            <Copy className="w-3.5 h-3.5" /> Copy
+                                        <button onClick={() => handleCopyMessage(msg.content)} className="w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-gray-300 hover:bg-white/5 rounded transition-colors">
+                                            <Copy className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> Copy
                                         </button>
-                                        <button onClick={() => handleForwardMessage(msg)} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 rounded transition-colors">
-                                            <MoreVertical className="w-3.5 h-3.5 rotate-90" /> Forward
+                                        <button onClick={() => handleForwardMessage(msg)} className="w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-gray-300 hover:bg-white/5 rounded transition-colors">
+                                            <MoreVertical className="w-3 sm:w-3.5 h-3 sm:h-3.5 rotate-90 flex-shrink-0" /> Forward
                                         </button>
-                                        <button onClick={() => handlePinMessage(msg)} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 rounded transition-colors">
-                                            <Flag className="w-3.5 h-3.5" /> Pin
-                                        </button>
-                                        <div className="h-px bg-white/5 my-0.5"></div>
-                                        <button onClick={() => handleStarMessage(msg._id)} className={`w-full flex items-center gap-2 px-3 py-2 text-xs rounded transition-colors ${starredMessages.includes(msg._id) ? 'text-yellow-400 hover:bg-yellow-500/10' : 'text-gray-300 hover:bg-white/5'}`}>
-                                            <Star className="w-3.5 h-3.5" /> {starredMessages.includes(msg._id) ? 'Unstar' : 'Star'}
-                                        </button>
-                                        <button onClick={() => handleSelectMessage(msg._id)} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 rounded transition-colors">
-                                            <Check className="w-3.5 h-3.5" /> Select
+                                        <button onClick={() => handlePinMessage(msg)} className="w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-gray-300 hover:bg-white/5 rounded transition-colors">
+                                            <Flag className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> Pin
                                         </button>
                                         <div className="h-px bg-white/5 my-0.5"></div>
-                                        <button onClick={() => handleReportMessage(msg)} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-orange-400 hover:bg-orange-500/10 rounded transition-colors">
-                                            <Flag className="w-3.5 h-3.5" /> Report
+                                        <button onClick={() => handleStarMessage(msg._id)} className={`w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded transition-colors ${starredMessages.includes(msg._id) ? 'text-yellow-400 hover:bg-yellow-500/10' : 'text-gray-300 hover:bg-white/5'}`}>
+                                            <Star className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> {starredMessages.includes(msg._id) ? 'Unstar' : 'Star'}
+                                        </button>
+                                        <button onClick={() => handleSelectMessage(msg._id)} className="w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-gray-300 hover:bg-white/5 rounded transition-colors">
+                                            <Check className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> Select
+                                        </button>
+                                        <div className="h-px bg-white/5 my-0.5"></div>
+                                        <button onClick={() => handleReportMessage(msg)} className="w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-orange-400 hover:bg-orange-500/10 rounded transition-colors">
+                                            <Flag className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> Report
                                         </button>
                                         {isMe && (
-                                            <button onClick={() => handleDeleteMessage(msg._id)} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 rounded transition-colors">
-                                                <Trash2 className="w-3.5 h-3.5" /> Delete
+                                            <button onClick={() => handleDeleteMessage(msg._id)} className="w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-red-400 hover:bg-red-500/10 rounded transition-colors">
+                                                <Trash2 className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> Delete
                                             </button>
                                         )}
                                     </>

@@ -73,6 +73,18 @@ io.on("connection", (socket) => {
     io.to(data.recipientId).emit("typing", data);
   });
 
+  // Handle user status change - broadcast to all connected clients
+  socket.on("updateUserStatus", (data) => {
+    // data: { userId, status }
+    console.log(`User ${data.userId} status changed to: ${data.status}`);
+    // Broadcast to all connected clients
+    io.emit("userStatusChanged", {
+      userId: data.userId,
+      status: data.status,
+      timestamp: new Date()
+    });
+  });
+
   // Handle disconnect
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);

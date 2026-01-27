@@ -5,6 +5,7 @@ import { API_PATHS } from '../../utils/apiPaths';
 import axiosInstance from '../../utils/axiosInstance';
 import toast from 'react-hot-toast';
 import { Users, Zap, TrendingUp, AlertCircle, CheckCircle2, Clock, BarChart3, Shield } from 'lucide-react';
+import AuditLogs from "./Auditlogs";
 
 const HostDashboard = () => {
 	const { user } = useContext(UserContext);
@@ -122,7 +123,7 @@ const HostDashboard = () => {
 								<BarChart3 className="w-8 h-8 text-purple-400 opacity-60" />
 							</div>
 							<div className="w-full bg-white/5 rounded-full h-1.5 border border-purple-500/20">
-								<div 
+								<div
 									className="bg-gradient-to-r from-purple-500 to-purple-400 h-full rounded-full transition-all duration-500"
 									style={{ width: `${completionRate}%` }}
 								></div>
@@ -256,6 +257,9 @@ const HostDashboard = () => {
 								</div>
 							</div>
 						</button>
+					</div>
+					<div className="pt-4 border-t border-gray-100 dark:border-gray-800">
+						<AuditLogs />
 					</div>
 
 					{/* Footer Stats */}

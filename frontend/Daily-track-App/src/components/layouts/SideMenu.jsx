@@ -77,15 +77,26 @@ const SideMenu = ({ activeMenu, isMobile, onMobileClose }) => {
   // --- Unified Menu Body ---
   const menuBody = (
     <nav className={`
-        h-full flex flex-col transition-all duration-300 ease-in-out relative overflow-hidden
+        h-130 mt-15 flex flex-col transition-all duration-300 ease-in-out relative overflow-hidden
         bg-[#050505] border-r border-white/10
         ${isCollapsed ? "w-20 items-center px-2" : "w-64 px-4"}
     `}>
       {/* Ambient Background Glow (Matching Login Page) */}
       <div className="absolute top-0 left-0 w-full h-32 bg-orange-600/5 blur-[50px] pointer-events-none" />
 
-      {/* Profile Section */}
-      <header className={`
+
+      {/* Menu Items */}
+      <ul className="relative z-10 flex flex-col gap-1 flex-1 overflow-y-auto pr-1 custom-scrollbar">
+        {sideMenuData.map((item) => (
+          <li key={item.label}>
+            <MenuItem item={item} activeMenu={activeMenu} onClick={handleClick} isCollapsed={isCollapsed} />
+          </li>
+        ))}
+      </ul>
+
+
+       {/* Profile Section */}
+      <div className={`
         relative z-10 flex items-center gap-3 py-6 mb-4 border-b border-white/10 transition-all duration-300
         ${isCollapsed ? 'justify-center flex-col pb-4' : ''}
       `}>
@@ -116,34 +127,7 @@ const SideMenu = ({ activeMenu, isMobile, onMobileClose }) => {
             </div>
           </div>
         )}
-      </header>
-
-      {/* Menu Items */}
-      <ul className="relative z-10 flex flex-col gap-1 flex-1 overflow-y-auto pr-1 custom-scrollbar">
-        {sideMenuData.map((item) => (
-          <li key={item.label}>
-            <MenuItem item={item} activeMenu={activeMenu} onClick={handleClick} isCollapsed={isCollapsed} />
-          </li>
-        ))}
-      </ul>
-
-      {/* Footer/Logout */}
-      <footer className="z-10 mt-auto py-6 border-t border-white/10 mb-2">
-        <button
-          onClick={handleLogout}
-          title={isCollapsed ? "Logout" : undefined}
-          className={`
-      group w-full flex items-center gap-3 text-sm p-3 rounded-lg transition-all duration-300 ease-in-out font-medium
-      text-gray-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/10
-      ${isCollapsed ? "justify-center" : "justify-start"}
-    `}
-        >
-          <div className="transition-transform group-hover:scale-110">
-            <LogOut className="w-5 h-5 group-hover:text-red-400" />
-          </div>
-          {!isCollapsed && <span className="tracking-wide">Logout</span>}
-        </button>
-      </footer>
+      </div>
     </nav>
   );
 

@@ -3,6 +3,7 @@ const User = require("../models/User");
 const Notification = require("../models/Notification");
 const Groq = require("groq-sdk"); // 
 const jwt = require("jsonwebtoken");
+const { logActivity } = require("../utils/auditLogger");
 
 // Initialize Groq Client
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
@@ -148,7 +149,16 @@ const createTask = async (req, res) => {
         });
         await task.save();
 
-        // 🔔 Notify Assignees
+        // � Log activity
+        await logActivity(
+            req.user._id,
+            "CREATE_TASK",
+            `Task: ${task.title}`,
+            { taskId: task._id, priority, assignedTo },
+            req
+        );
+
+        // �🔔 Notify Assignees
         await sendTaskNotifications(task, req.user._id, 'task_assigned');
 
         res.status(201).json({ message: "Task created successfully", task });
@@ -180,7 +190,16 @@ const updateTask = async (req, res) => {
 
         const updatedTask = await task.save();
 
-        // 🔔 Notify assigned members of the update
+        // � Log activity
+        await logActivity(
+            req.user._id,
+            "UPDATE_TASK",
+            `Task: ${updatedTask.title}`,
+            { taskId: updatedTask._id },
+            req
+        );
+
+        // �🔔 Notify assigned members of the update
         await sendTaskNotifications(updatedTask, req.user._id, 'status_update');
 
         res.json({ message: "Task updated successfully", updatedTask });
@@ -194,6 +213,13 @@ const deleteTask = async (req, res) => {
         const task = await Task.findById(req.params.id);
         if (!task) return res.status(404).json({ message: "Task not found" });
         await task.deleteOne(); 
+        await logActivity(
+        req.user._id,        // Who did it?
+        "DELETE_TASK",       // What did they do?
+        `Task: ${task.title}`, // What was affected?
+        { taskId: task._id }, // Extra details
+        req // Pass request object for IP logging
+    );
         res.json({ message: "Task deleted successfully" });
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
