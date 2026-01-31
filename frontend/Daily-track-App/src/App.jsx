@@ -23,12 +23,14 @@ import ManageUser from './pages/Admin/ManageUsers';
 import AdminMessages from './pages/Admin/AdminMessages'; // Keeping this as it was in your snippet
 import Reports from './pages/Admin/Reports';
 import TeamPerformance from './pages/Admin/TeamPerformance';
+import AdminNotifications from './pages/Admin/Notifications';
 
 // User Pages
 import UserDashboard from './pages/User/UserDashboard';
 import MyTasks from './pages/User/MyTasks';
 import ViewTaskDetails from './pages/User/ViewTaskDetails';
 import UserMessages from './pages/User/UserMessages'; // Keeping this as it was in your snippet
+import UserNotifications from './pages/User/Notifications';
 
 // Host Pages
 import HostDashboard from './pages/Host/HostDashboard';
@@ -36,6 +38,7 @@ import GlobalTaskManager from './pages/Host/GlobalTaskManager';
 import GlobalUsers from './pages/Host/GlobalUsers';
 import UserDetailPage from './pages/Host/UserDetailPage';
 import GodMode from './pages/Host/GodMode';
+import HostNotifications from './pages/Host/Notifications';
 import ReloadingIcon from './components/ReloadingIcon.jsx';
 import AuditLogs from "../src/pages/Host/Auditlogs.jsx";
 
@@ -59,6 +62,7 @@ const App = () => {
             <Route path='admin/messages' element={<AdminMessages />} />
             <Route path='admin/reports' element={<Reports />} />
             <Route path='admin/performance' element={<TeamPerformance />} />
+            <Route path='admin/notifications' element={<AdminNotifications />} />
           </Route>
 
           {/* User Protected */}
@@ -67,6 +71,7 @@ const App = () => {
             <Route path='user/tasks' element={<MyTasks />} />
             <Route path='user/task/:id' element={<ViewTaskDetails />} />
             <Route path='user/messages' element={<UserMessages />} />
+            <Route path='user/notifications' element={<UserNotifications />} />
           </Route>
 
           {/* Host Protected */}
@@ -76,6 +81,7 @@ const App = () => {
             <Route path='host/users' element={<GlobalUsers />} />
             <Route path='host/users/:id' element={<UserDetailPage />} />
             <Route path='host/god-mode' element={<GodMode />} />
+            <Route path='host/notifications' element={<HostNotifications />} />
             <Route path="/host/audit-logs" element={<AuditLogs />} />
           </Route>
 

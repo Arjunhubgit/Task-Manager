@@ -3,14 +3,13 @@ import ReactDOM from 'react-dom';
 import socket from '../../services/socket';
 import {
     Search, Send, MoreVertical, Phone, Video, Info, Paperclip,
-    Smile, User as UserIcon, MessageSquare, Check, CheckCheck,
+    Smile, MessageSquare, Check, CheckCheck,
     Bell, ChevronLeft, Trash2, Copy, Star, Reply, Flag
 } from 'lucide-react';
 import { UserContext } from '../../context/userContext';
 import axiosInstance from '../../utils/axiosInstance';
 import MessagingService from '../../services/messagingService';
 import toast from 'react-hot-toast';
-import DashboardLayout from '../../components/layouts/DashboardLayout';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getImageUrl } from '../../utils/helper';
 import Navbar from '../../components/layouts/Navbar';
@@ -209,28 +208,55 @@ const AdminMessages = () => {
         if (!user || !user._id) return;
         try {
             setIsLoadingConversations(true);
-            const conversations = await MessagingService.getConversations(user._id);
-
-            if (Array.isArray(conversations) && conversations.length > 0) {
-                setConversations(conversations.map(conv => {
-                    const otherParticipant = conv.participants.find(p => p._id !== user._id) || conv.participants[0];
+            
+            // Fetch all team members/users
+            const response = await axiosInstance.get('/api/users/for-messaging');
+            
+            if (response.data && response.data.users && Array.isArray(response.data.users)) {
+                // Fetch existing conversations to get message history
+                const existingConversations = await MessagingService.getConversations(user._id);
+                
+                // Create a map of existing conversations for easy lookup
+                const conversationMap = {};
+                if (Array.isArray(existingConversations)) {
+                    existingConversations.forEach(conv => {
+                        const otherParticipant = conv.participants.find(p => p._id !== user._id) || conv.participants[0];
+                        conversationMap[otherParticipant._id] = {
+                            _id: conv._id,
+                            lastMessage: conv.lastMessage || 'Start a conversation...',
+                            timestamp: conv.lastMessageTime || new Date(),
+                            unread: conv.unreadCounts?.[user._id] || 0
+                        };
+                    });
+                }
+                
+                // Map all users and merge with existing conversation data
+                const allMembers = response.data.users.map(u => {
+                    const existingConv = conversationMap[u._id];
                     return {
-                        _id: conv._id,
-                        conversationId: conv._id,
-                        participantId: otherParticipant._id,
-                        participantName: otherParticipant.name,
-                        participantEmail: otherParticipant.email,
-                        participantImage: otherParticipant.profileImageUrl,
-                        participantRole: otherParticipant.role,
-                        participantStatus: otherParticipant.status, // Include status
-                        participantIsOnline: otherParticipant.isOnline, // Include online status
-                        lastMessage: conv.lastMessage || 'Start a conversation...',
-                        timestamp: conv.lastMessageTime || new Date(),
-                        unread: conv.unreadCounts?.[user._id] || 0
+                        _id: existingConv?._id || u._id,
+                        conversationId: existingConv?._id || u._id,
+                        participantId: u._id,
+                        participantName: u.name,
+                        participantEmail: u.email,
+                        participantImage: u.profileImageUrl,
+                        participantRole: u.role,
+                        participantStatus: u.status,
+                        participantIsOnline: u.isOnline,
+                        lastMessage: existingConv?.lastMessage || 'Start a conversation...',
+                        timestamp: existingConv?.timestamp || new Date(),
+                        unread: existingConv?.unread || 0
                     };
-                }));
-            } else {
-                // Fallback logic remains...
+                });
+                
+                // Sort by timestamp (most recent first)
+                allMembers.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                setConversations(allMembers);
+            }
+        } catch (error) {
+            console.error('Failed to fetch conversations:', error);
+            try {
+                // Fallback: try to fetch users directly
                 const response = await axiosInstance.get('/api/users/for-messaging');
                 if (response.data && response.data.users) {
                     setConversations(response.data.users.map(u => ({
@@ -240,17 +266,16 @@ const AdminMessages = () => {
                         participantEmail: u.email,
                         participantImage: u.profileImageUrl,
                         participantRole: u.role,
-                        participantStatus: u.status, // Include status
-                        participantIsOnline: u.isOnline, // Include online status
+                        participantStatus: u.status,
+                        participantIsOnline: u.isOnline,
                         lastMessage: 'Start a conversation...',
                         timestamp: new Date(),
                         unread: 0
                     })));
                 }
+            } catch (fallbackError) {
+                console.error('Fallback fetch also failed:', fallbackError);
             }
-        } catch (error) {
-            console.error('Failed to fetch conversations:', error);
-            // ... fallback logic
         } finally {
             setIsLoadingConversations(false);
         }
@@ -505,7 +530,7 @@ const AdminMessages = () => {
         <>
                 <Navbar />
                 {/* <DashboardLayout activeMenu="Messages"> */}
-                <div className="flex h-[calc(100vh-120)] sm:h-[calc(100vh-140)] md:h-[calc(97vh-100px)] bg-[#050505] rounded-lg sm:rounded-2xl md:rounded-[30px] border border-white/5 overflow-hidden shadow-2xl relative">
+                <div className="flex h-[calc(100vh-120)] sm:h-[calc(100vh-100)] md:h-[calc(99vh-100px)] bg-[#050505] rounded-lg sm:rounded-2xl md:rounded-[20px] border border-white/5 overflow-hidden shadow-2xl relative">
 
                     {/* --- LEFT SIDEBAR --- */}
                     <div className={`w-full sm:w-72 md:w-80 lg:w-96 border-r border-white/5 flex-col bg-[#0a0a0a]/80 backdrop-blur-2xl ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
@@ -707,7 +732,14 @@ const AdminMessages = () => {
                                 </div>
 
                                 {/* Messages List Area */}
-                                <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 custom-scrollbar bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-orange-500/5 via-transparent to-transparent relative z-0">
+                                <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 custom-scrollbar relative z-0" style={{
+                                    backgroundColor: '#050505',
+                                    backgroundImage: `linear-gradient(135deg, rgba(0, 0, 0, 0.6) 75%, rgba(15, 15, 15, 0.92) 100%), url(${new URL('../../assets/svg/chatbg.png', import.meta.url).href})`,
+                                    backgroundSize: 'cover',
+                                    backgroundAttachment: 'fixed',
+                                    backgroundPosition: 'center',
+                                    backgroundRepeat: 'no-repeat'
+                                }}>
                                     <AnimatePresence initial={false}>
                                         {messages.map((msg, idx) => {
                                             const senderId = typeof msg.senderId === 'object' ? msg.senderId._id : msg.senderId;

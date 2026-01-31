@@ -9,6 +9,7 @@ import UserCard from '../../components/cards/UserCard';
 import Modal from '../../components/Modal'; // Existing Modal component
 import Input from '../../components/inputs/input'; // Existing Input component
 import AdminInviteManager from "../../components/AdminInviteManager";
+import socket from '../../services/socket';
 
 
 const ManageUsers = () => {
@@ -107,6 +108,32 @@ const ManageUsers = () => {
     }, 3000); // Poll every 3 seconds
 
     return () => clearInterval(pollInterval);
+  }, []);
+
+  // --- Socket.io Real-time Status Updates ---
+  useEffect(() => {
+    socket.connect();
+    
+    // Listen for user status changes and update immediately
+    socket.on('userStatusChanged', (data) => {
+      // data: { userId, status, timestamp }
+      setUsers((prevUsers) => {
+        return prevUsers.map((user) => {
+          if (user._id === data.userId) {
+            return {
+              ...user,
+              status: data.status
+            };
+          }
+          return user;
+        });
+      });
+    });
+
+    return () => {
+      socket.off('userStatusChanged');
+      socket.disconnect();
+    };
   }, []);
 
   useEffect(() => {

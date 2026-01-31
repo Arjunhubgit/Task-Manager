@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useContext, useEffect, useRef } from 'react';
 import { Menu, X, LayoutDashboard, Settings, Users, CheckSquare, LogOut, ChevronDown, User as UserIcon, Mail, AlertCircle, Loader } from "lucide-react";
-import { UserContext } from '../../context/userContext'; // Import User Context
-import logo from '../../assets/svg/logo.png';
+import { UserContext } from '../../context/userContext'; 
+import logo from '../../assets/svg/logo1.png';
 import title from '../../assets/svg/title.png';
 import SearchBar from '../navbar/SearchBar';
 import NotificationsBell from '../navbar/NotificationsBell';
@@ -12,13 +12,6 @@ import toast from 'react-hot-toast';
 import { getImageUrl } from '../../utils/helper';
 import socket from '../../services/socket';
 
-// --- Static Desktop Links Data ---
-const DESKTOP_LINKS = [
-    { label: "Dashboard", href: "#", icon: LayoutDashboard },
-    { label: "My Tasks", href: "#", icon: CheckSquare },
-    { label: "Team", href: "#", icon: Users },
-    { label: "Settings", href: "#", icon: Settings },
-];
 
 const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
     const { user, clearUser, updateUserStatus } = useContext(UserContext); // Get user data and logout function
@@ -135,7 +128,13 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                     {isMobileMenuOpen ? <X className="w-6 h-6 text-red-500" /> : <Menu className="w-6 h-6" />}
                 </button>
                 {/* Logo and Title - Desktop only */}
-                <div className="hidden md:flex items-center gap-1">
+                <button
+                    onClick={() => {
+                        const dashboardRoute = user?.role === 'admin' ? '/admin/dashboard' : '/user/dashboard';
+                        navigate(dashboardRoute);
+                    }}
+                    className="hidden md:flex items-center gap-1 cursor-pointer hover:opacity-95 transition-opacity duration-300 active:scale-98"
+                >
                     <img 
                         src={logo} 
                         alt="Logo" 
@@ -144,9 +143,9 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
                     <img 
                         src={title} 
                         alt="Title" 
-                        className="h-8 w-40" 
+                        className="h-15" 
                     />
-                </div>
+                </button>
             </div>
 
 

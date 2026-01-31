@@ -9,7 +9,8 @@ import axiosInstance from "../../utils/axiosInstance.js";
 import { API_PATHS } from "../../utils/apiPaths.js";
 import { UserContext } from "../../context/userContext.jsx";
 import imgage from "../../assets/svg/google-color.svg";
-import logo from "../../assets/images/logo1.png";
+import logo from "../../assets/svg/logo1.png";
+import title from "../../assets/svg/title.png";
 
 // Firebase
 import { signInWithPopup } from "firebase/auth";
@@ -118,7 +119,8 @@ const Login = () => {
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#EA8D23] to-transparent opacity-50"></div>
             
             <div className="mb-8">
-                <img src={logo} alt="Logo" className="h-10 mb-6 object-contain" />
+                <img src={logo} alt="Logo" className="h-15 mb-6 inline" />
+                <img src={title} alt="Title" className="h-20 mb-6 inline" />
                 <h1 className="text-3xl font-bold text-white tracking-tight">Welcome Back</h1>
                 <p className="text-gray-500 text-sm mt-2">Enter your credentials to access your workspace.</p>
             </div>

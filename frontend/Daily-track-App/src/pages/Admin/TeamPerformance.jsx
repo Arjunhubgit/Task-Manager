@@ -16,16 +16,34 @@ const TeamPerformance = () => {
   const fetchTeamPerformance = async () => {
     try {
       setLoading(true);
-      const response = await axiosInstance.get(API_PATHS.USERS.GET_ALL_USERS);
-      if (response.data) {
-        setTeamMembers(response.data);
-        // Fetch performance stats for each member
+      
+      // Fetch all users and tasks in parallel
+      const [usersResponse, tasksResponse] = await Promise.all([
+        axiosInstance.get(API_PATHS.USERS.GET_ALL_USERS),
+        axiosInstance.get(API_PATHS.TASKS.GET_ALL_TASKS),
+      ]);
+      
+      // Handle different response structures
+      const users = Array.isArray(usersResponse.data) 
+        ? usersResponse.data 
+        : usersResponse.data?.data || [];
+      
+      let allTasks = [];
+      if (Array.isArray(tasksResponse.data)) {
+        allTasks = tasksResponse.data;
+      } else if (tasksResponse.data?.data && Array.isArray(tasksResponse.data.data)) {
+        allTasks = tasksResponse.data.data;
+      } else if (tasksResponse.data?.success && Array.isArray(tasksResponse.data.tasks)) {
+        allTasks = tasksResponse.data.tasks;
+      }
+      
+      if (users.length > 0) {
+        setTeamMembers(users);
+        
+        // Calculate stats for each member
         const stats = {};
-        for (const member of response.data) {
-          const taskResponse = await axiosInstance.get(API_PATHS.TASKS.GET_TASKS);
-          // Filter tasks for this member and calculate stats
-          const memberTasks = taskResponse.data || [];
-          stats[member._id] = calculateMemberStats(memberTasks, member._id);
+        for (const member of users) {
+          stats[member._id] = calculateMemberStats(allTasks, member._id);
         }
         setMemberStats(stats);
       }
@@ -38,6 +56,19 @@ const TeamPerformance = () => {
 
   // Calculate stats for each member
   const calculateMemberStats = (tasks, memberId) => {
+    // Ensure tasks is an array
+    if (!Array.isArray(tasks)) {
+      return {
+        total: 0,
+        completed: 0,
+        inProgress: 0,
+        pending: 0,
+        high: 0,
+        completionRate: 0,
+        efficiency: 0,
+      };
+    }
+
     const memberTasks = tasks.filter((task) =>
       task.assignedTo?.includes(memberId) || task.createdBy === memberId
     );

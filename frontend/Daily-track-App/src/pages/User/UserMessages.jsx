@@ -505,7 +505,7 @@ const UserMessages = () => {
         <>
             <Navbar />
             {/* <DashboardLayout activeMenu="Messages"> */}
-            <div className="flex h-[calc(100vh-120)] sm:h-[calc(100vh-140)] md:h-[calc(97vh-100px)] bg-[#050505] rounded-lg sm:rounded-2xl md:rounded-[30px] border border-white/5 overflow-hidden shadow-2xl relative">
+            <div className="flex h-[calc(100vh-120)] sm:h-[calc(100vh-140)] md:h-[calc(99vh-100px)] bg-[#050505] rounded-lg sm:rounded-2xl md:rounded-[30px] border border-white/5 overflow-hidden shadow-2xl relative">
 
                 {/* --- LEFT SIDEBAR --- */}
                 <div className={`w-full sm:w-72 md:w-80 lg:w-96 border-r border-white/5 flex-col bg-[#0a0a0a]/80 backdrop-blur-2xl ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
@@ -707,7 +707,14 @@ const UserMessages = () => {
                             </div>
 
                             {/* Messages List Area */}
-                            <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 custom-scrollbar bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-orange-500/5 via-transparent to-transparent relative z-0">
+                            <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 custom-scrollbar relative z-0" style={{
+                                backgroundColor: '#050505',
+                                backgroundImage: `linear-gradient(135deg, rgba(0, 0, 0, 0.6) 75%, rgba(15, 15, 15, 0.92) 100%), url(${new URL('../../assets/svg/chatbg.png', import.meta.url).href})`,
+                                backgroundSize: 'cover',
+                                backgroundAttachment: 'fixed',
+                                backgroundPosition: 'center',
+                                backgroundRepeat: 'no-repeat'
+                            }}>
                                 <AnimatePresence initial={false}>
                                     {messages.map((msg, idx) => {
                                         const senderId = typeof msg.senderId === 'object' ? msg.senderId._id : msg.senderId;

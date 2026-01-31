@@ -11,7 +11,7 @@ import { API_PATHS } from '../../utils/apiPaths';
 import { UserContext } from '../../context/userContext';
 import uploadImage from '../../utils/uploadimage';
 import googleIcon from "../../assets/svg/google-color.svg";
-import logo from "../../assets/images/logo1.png";
+import logo from "../../assets/svg/logo1.png";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Firebase Imports

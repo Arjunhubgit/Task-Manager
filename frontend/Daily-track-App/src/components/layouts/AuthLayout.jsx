@@ -1,6 +1,5 @@
 import { FaTasks } from 'react-icons/fa';
-import Logo_img from '../../assets/images/logo1.png';
-import Logo_img2 from '../../assets/images/logo2.png';
+import Logo_img from '../../assets/svg/logo1.png';
 
 const AuthLayout = ({ children }) => {
     return (
@@ -22,26 +21,14 @@ const AuthLayout = ({ children }) => {
                                 className="w-12 h-12 object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]" 
                             />
                         </div>
-
+                
                         {/* Children Wrapper: Centers the login/signup card */}
                         <div className="flex-1 flex flex-col items-center justify-center w-full">
                             {children}
                         </div>
                     </div>
                     
-                    {/* Right side: Sticky Visual */}
-                    <div className="hidden md:flex w-[45vw] h-screen items-center justify-center sticky top-0 p-8">
-                        <div className="relative w-full h-[90%] rounded-3xl overflow-hidden border border-white/10 shadow-2xl bg-black/20 backdrop-blur-sm group">
-                            {/* Inner Glow */}
-                            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-50 pointer-events-none" />
-                            
-                            <img 
-                                src={Logo_img2} 
-                                alt="Auth Visual" 
-                                className="w-full h-full object-cover opacity-90 transition-transform duration-700 group-hover:scale-105" 
-                            />
-                        </div>
-                    </div> 
+                    
                 </div>
             </div>
         </div>

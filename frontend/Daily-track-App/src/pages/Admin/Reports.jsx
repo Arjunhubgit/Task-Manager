@@ -22,7 +22,20 @@ const Reports = () => {
   const fetchReportData = async () => {
     try {
       setLoading(true);
-      const response = await axiosInstance.get(API_PATHS.TASKS.GET_DASHBOARD_DATA);
+      const params = new URLSearchParams();
+      
+      // Add filters to query parameters
+      if (dateRange && dateRange !== "all") {
+        params.append("dateRange", dateRange);
+      }
+      if (selectedMember && selectedMember !== "all") {
+        params.append("memberId", selectedMember);
+      }
+      
+      const queryString = params.toString();
+      const url = queryString ? `${API_PATHS.TASKS.GET_DASHBOARD_DATA}?${queryString}` : API_PATHS.TASKS.GET_DASHBOARD_DATA;
+      
+      const response = await axiosInstance.get(url);
       if (response.data) {
         setDashboardData(response.data);
       }

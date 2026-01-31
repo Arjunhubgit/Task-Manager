@@ -235,12 +235,56 @@ const updateTaskStatus = async (req, res) => {
         const isAssigned = task.assignedTo.some(userId => userId.toString() === req.user._id.toString());
         if (!isAssigned && req.user.role !== "admin") return res.status(403).json({ message: "Not authorized" });
 
+        const oldStatus = task.status;
         task.status = req.body.status || task.status;
+        
         if (task.status === "Completed") {
             task.todoChecklist.forEach(item => item.completed = true);
             task.progress = 100;
         }
+        
         await task.save();
+
+        // Create notifications when status changes to "Completed"
+        if (task.status === "Completed" && oldStatus !== "Completed") {
+            try {
+                const currentUser = await User.findById(req.user._id);
+                const currentUserName = currentUser?.name || "User";
+
+                // Notify admin about task completion
+                if (task.createdBy) {
+                    const notification = new Notification({
+                        userId: task.createdBy,
+                        type: "task_completed",
+                        title: "Task completed",
+                        message: `${currentUserName} marked "${task.title}" as completed`,
+                        relatedTaskId: task._id,
+                        relatedUserId: req.user._id,
+                    });
+                    await notification.save();
+                    console.log(`✅ Task completion notification created for admin`);
+                }
+
+                // Notify other team members assigned to the task
+                for (const userId of task.assignedTo) {
+                    if (userId.toString() !== req.user._id.toString()) {
+                        const notification = new Notification({
+                            userId,
+                            type: "task_completed",
+                            title: "Task completed",
+                            message: `${currentUserName} marked "${task.title}" as completed`,
+                            relatedTaskId: task._id,
+                            relatedUserId: req.user._id,
+                        });
+                        await notification.save();
+                        console.log(`✅ Task completion notification created for user ${userId}`);
+                    }
+                }
+            } catch (notificationError) {
+                console.error("Error creating completion notifications:", notificationError.message);
+            }
+        }
+
         res.json({ message: "Task status updated", task });
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
