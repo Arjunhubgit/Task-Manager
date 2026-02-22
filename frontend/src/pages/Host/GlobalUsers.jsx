@@ -4,6 +4,7 @@ import { UserContext } from '../../context/userContext';
 import DashboardLayout from '../../components/layouts/DashboardLayout';
 import { API_PATHS } from '../../utils/apiPaths';
 import axiosInstance from '../../utils/axiosInstance';
+import socket from '../../services/socket';
 import toast from 'react-hot-toast';
 
 
@@ -20,6 +21,23 @@ const GlobalUsers = () => {
 
 	useEffect(() => {
 		fetchAllUsers();
+	}, []);
+
+	// Listen for real-time user status changes
+	useEffect(() => {
+		socket.on('userStatusChanged', (data) => {
+			setUsers(prevUsers => 
+				prevUsers.map(u => 
+					u._id === data.userId 
+						? { ...u, status: data.status, isOnline: data.status === 'online' }
+						: u
+				)
+			);
+		});
+
+		return () => {
+			socket.off('userStatusChanged');
+		};
 	}, []);
 
 	const fetchAllUsers = async () => {

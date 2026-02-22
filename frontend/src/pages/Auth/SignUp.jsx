@@ -11,8 +11,10 @@ import { API_PATHS } from '../../utils/apiPaths';
 import { UserContext } from '../../context/userContext';
 import uploadImage from '../../utils/uploadimage';
 import googleIcon from "../../assets/svg/google-color.svg";
+import title from "../../assets/svg/title.png";
 import logo from "../../assets/svg/logo1.png";
 import { motion, AnimatePresence } from "framer-motion";
+
 
 // Firebase Imports
 import { signInWithPopup } from "firebase/auth";
@@ -237,8 +239,9 @@ const SignUp = () => {
         {/* RIGHT SIDE: FORM SECTION */}
         <div className="w-full md:w-[55%] p-8 md:p-12 flex flex-col h-full overflow-y-auto custom-scrollbar bg-[#121212]">
           <div className="flex items-center gap-2 mb-6 flex-shrink-0">
-            <img src={logo} alt="ChronoFlow Logo" className="h-7" />
-            <span className="text-white font-bold text-lg tracking-tight uppercase">CHRONOFLOW</span>
+            <img src={logo} alt="ChronoFlow Logo" className="h-15" />
+            <img src={title} alt="ChronoFlow Logo" className="h-20" />
+      
           </div>
 
           <div className="mb-6 flex-shrink-0">

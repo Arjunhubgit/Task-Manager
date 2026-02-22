@@ -216,19 +216,61 @@ const deleteUser = async (req, res) => {
 // @access  Private
 const updateUser = async (req, res) => {
   try {
-    const { status } = req.body;
+    const { status, role, name, email, password, isBanned } = req.body;
+    const updateData = {};
     
-    // Validate status if provided
-    if (status && !['online', 'idle', 'dnd', 'invisible'].includes(status)) {
-      return res.status(400).json({ message: "Invalid status value" });
+    // Validate and add status if provided
+    if (status) {
+      if (!['online', 'idle', 'dnd', 'invisible'].includes(status)) {
+        return res.status(400).json({ message: "Invalid status value" });
+      }
+      updateData.status = status;
+    }
+
+    // Handle role change
+    if (role) {
+      if (!['admin', 'member', 'host'].includes(role)) {
+        return res.status(400).json({ message: "Invalid role value" });
+      }
+      updateData.role = role;
+    }
+
+    // Handle name update
+    if (name) {
+      updateData.name = name;
+    }
+
+    // Handle email update
+    if (email) {
+      // Check if email already exists (excluding current user)
+      const existingUser = await User.findOne({ 
+        email, 
+        _id: { $ne: req.params.id } 
+      });
+      if (existingUser) {
+        return res.status(400).json({ message: "Email already in use" });
+      }
+      updateData.email = email;
+    }
+
+    // Handle password update
+    if (password) {
+      if (password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+      const salt = await bcrypt.genSalt(10);
+      updateData.password = await bcrypt.hash(password, salt);
+    }
+
+    // Handle ban status
+    if (isBanned !== undefined) {
+      updateData.isBanned = isBanned;
     }
 
     // Find and update user
     const user = await User.findByIdAndUpdate(
       req.params.id,
-      { 
-        ...(status && { status })
-      },
+      updateData,
       { new: true } // Return updated document
     ).select("-password");
 

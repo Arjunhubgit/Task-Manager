@@ -16,6 +16,7 @@ import {
   Filter,
   Search,
 } from "lucide-react";
+import DashboardLayout from "../../components/layouts/DashboardLayout";
 
 // Notification Type Icons
 const getNotificationIcon = (type) => {
@@ -68,15 +69,15 @@ const NotificationCard = ({
   };
 
   return (
+
     <div
       className={`
         relative group rounded-lg border transition-all duration-300 p-5 mb-4
         bg-gradient-to-br ${getTypeColor(notification.type)}
         hover:shadow-lg hover:shadow-orange-500/10
-        ${
-          notification.read
-            ? "opacity-70"
-            : "ring-1 ring-orange-500/30 shadow-md shadow-orange-500/10"
+        ${notification.read
+          ? "opacity-70"
+          : "ring-1 ring-orange-500/30 shadow-md shadow-orange-500/10"
         }
       `}
     >
@@ -295,7 +296,7 @@ const AdminNotifications = () => {
   // Initial fetch
   useEffect(() => {
     fetchNotifications();
-    
+
     // Auto-refresh notifications every 10 seconds
     const interval = setInterval(() => {
       fetchNotifications();
@@ -321,214 +322,192 @@ const AdminNotifications = () => {
   const unreadNotifications = filteredNotifications.filter((n) => !n.read);
 
   return (
-    <div className="min-h-screen bg-[#050505]">
-      {/* Header Section */}
-      <div className="relative border-b border-white/10 bg-gradient-to-b from-white/5 to-transparent">
-        <div className="px-8 py-8">
-          {/* Background Glow */}
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-48 bg-orange-600/5 blur-3xl pointer-events-none" />
+    <DashboardLayout activeMenu="notifications">
+      <div className="min-h-screen bg-[#050505]">
+        {/* Header Section */}
+        <div className="relative border-b border-white/10 bg-gradient-to-b from-white/5 to-transparent">
+          <div className="px-8 py-8">
+            {/* Background Glow */}
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-48 bg-orange-600/5 blur-3xl pointer-events-none" />
 
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <Bell className="w-8 h-8 text-[#EA8D23]" />
-                  <h1 className="text-4xl font-bold text-white">Notifications</h1>
-                </div>
-                <p className="text-gray-400 text-sm">
-                  {unreadCount > 0
-                    ? `You have ${unreadCount} unread notification${
-                        unreadCount !== 1 ? "s" : ""
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <Bell className="w-8 h-8 text-[#EA8D23]" />
+                    <h1 className="text-4xl font-bold text-white">Notifications</h1>
+                  </div>
+                  <p className="text-gray-400 text-sm">
+                    {unreadCount > 0
+                      ? `You have ${unreadCount} unread notification${unreadCount !== 1 ? "s" : ""
                       }`
-                    : "No unread notifications"}
-                </p>
+                      : "No unread notifications"}
+                  </p>
+                </div>
+
+                {/* Stats Cards */}
+                <div className="flex items-center gap-4">
+                  <div className="bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-center">
+                    <div className="text-2xl font-bold text-[#EA8D23]">
+                      {notifications.length}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">Total</div>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-center">
+                    <div className="text-2xl font-bold text-green-400">
+                      {notifications.filter((n) => n.read).length}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">Read</div>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-center">
+                    <div className="text-2xl font-bold text-orange-400">
+                      {unreadCount}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">Unread</div>
+                  </div>
+                </div>
               </div>
 
-              {/* Stats Cards */}
-              <div className="flex items-center gap-4">
-                <div className="bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-center">
-                  <div className="text-2xl font-bold text-[#EA8D23]">
-                    {notifications.length}
-                  </div>
-                  <div className="text-xs text-gray-400 mt-1">Total</div>
+              {/* Action Bar */}
+              {notifications.length > 0 && (
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={handleMarkAllAsRead}
+                    disabled={unreadCount === 0 || isLoading}
+                    className="flex items-center gap-2 px-4 py-2 bg-[#EA8D23]/10 border border-[#EA8D23]/30 text-[#EA8D23] hover:bg-[#EA8D23]/20 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    Mark All as Read
+                  </button>
+
+                  <button
+                    onClick={handleDeleteAll}
+                    disabled={isLoading}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete All
+                  </button>
                 </div>
-                <div className="bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-center">
-                  <div className="text-2xl font-bold text-green-400">
-                    {notifications.filter((n) => n.read).length}
-                  </div>
-                  <div className="text-xs text-gray-400 mt-1">Read</div>
-                </div>
-                <div className="bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-center">
-                  <div className="text-2xl font-bold text-orange-400">
-                    {unreadCount}
-                  </div>
-                  <div className="text-xs text-gray-400 mt-1">Unread</div>
-                </div>
-              </div>
+              )}
             </div>
-
-            {/* Action Bar */}
-            {notifications.length > 0 && (
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={handleMarkAllAsRead}
-                  disabled={unreadCount === 0 || isLoading}
-                  className="flex items-center gap-2 px-4 py-2 bg-[#EA8D23]/10 border border-[#EA8D23]/30 text-[#EA8D23] hover:bg-[#EA8D23]/20 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  Mark All as Read
-                </button>
-
-                <button
-                  onClick={handleDeleteAll}
-                  disabled={isLoading}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Delete All
-                </button>
-              </div>
-            )}
           </div>
         </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Filter Sidebar */}
-          <div className="lg:col-span-1">
-            <div className="sticky top-24 space-y-6">
-              {/* Filter Card */}
-              <div className="bg-gradient-to-b from-white/5 to-white/[0.02] border border-white/10 rounded-lg p-6 backdrop-blur">
-                <h3 className="flex items-center gap-2 text-sm font-semibold text-white mb-4">
-                  <Filter className="w-4 h-4 text-[#EA8D23]" />
-                  Filter by Type
-                </h3>
+        {/* Main Content */}
+        <div className="px-8 py-8">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+            {/* Filter Sidebar */}
+            <div className="lg:col-span-1">
+              <div className="sticky top-24 space-y-6">
+                {/* Filter Card */}
+                <div className="bg-gradient-to-b from-white/5 to-white/[0.02] border border-white/10 rounded-lg p-6 backdrop-blur">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-white mb-4">
+                    <Filter className="w-4 h-4 text-[#EA8D23]" />
+                    Filter by Type
+                  </h3>
 
-                <div className="space-y-2">
-                  {notificationTypes.map((type) => (
-                    <button
-                      key={type.value}
-                      onClick={() => setSelectedFilter(type.value)}
-                      className={`
+                  <div className="space-y-2">
+                    {notificationTypes.map((type) => (
+                      <button
+                        key={type.value}
+                        onClick={() => setSelectedFilter(type.value)}
+                        className={`
                         w-full text-left px-4 py-2.5 rounded-lg transition-all duration-300 text-sm font-medium
-                        ${
-                          selectedFilter === type.value
+                        ${selectedFilter === type.value
                             ? "bg-[#EA8D23]/20 border border-[#EA8D23]/50 text-[#EA8D23] shadow-lg shadow-orange-500/20"
                             : "bg-transparent border border-transparent text-gray-400 hover:bg-white/5 hover:text-gray-200"
-                        }
+                          }
                       `}
-                    >
-                      {type.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Info Card */}
-              <div className="bg-gradient-to-b from-[#EA8D23]/10 to-[#EA8D23]/5 border border-[#EA8D23]/20 rounded-lg p-6">
-                <h4 className="font-semibold text-[#EA8D23] mb-3 text-sm">
-                  💡 Quick Tips
-                </h4>
-                <ul className="text-xs text-gray-400 space-y-2">
-                  <li>• Mark notifications as read to keep track</li>
-                  <li>• Filter by type to find specific updates</li>
-                  <li>• Search to quickly locate notifications</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          {/* Notifications List */}
-          <div className="lg:col-span-3">
-            {/* Search Bar */}
-            {filteredNotifications.length > 0 && (
-              <div className="mb-6">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                  <input
-                    type="text"
-                    placeholder="Search notifications..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-600 focus:outline-none focus:border-[#EA8D23]/50 focus:ring-1 focus:ring-[#EA8D23]/20 transition-all"
-                  />
-                </div>
-              </div>
-            )}
-
-            {isLoading && (
-              <div className="flex flex-col items-center justify-center py-16">
-                <Loader className="w-12 h-12 text-[#EA8D23] animate-spin mb-4" />
-                <p className="text-gray-400">Loading notifications...</p>
-              </div>
-            )}
-
-            {hasError && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-6 text-center">
-                <AlertCircle className="w-8 h-8 text-red-400 mx-auto mb-3" />
-                <p className="text-red-400 font-medium">
-                  Failed to load notifications
-                </p>
-                <button
-                  onClick={fetchNotifications}
-                  className="mt-4 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-lg transition-colors text-sm"
-                >
-                  Try Again
-                </button>
-              </div>
-            )}
-
-            {!isLoading && !hasError && filteredNotifications.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-16 bg-gradient-to-b from-white/5 to-transparent border border-white/10 rounded-lg">
-                <Bell className="w-16 h-16 text-gray-600 mb-4" />
-                <h3 className="text-lg font-semibold text-gray-300 mb-2">
-                  {selectedFilter === "all"
-                    ? "No notifications yet"
-                    : `No ${
-                        notificationTypes.find((t) => t.value === selectedFilter)
-                          ?.label
-                      }`}
-                </h3>
-                <p className="text-gray-500 text-sm text-center">
-                  {selectedFilter === "all"
-                    ? "Stay tuned! You'll get notified when there are updates."
-                    : "Try selecting a different filter."}
-                </p>
-              </div>
-            )}
-
-            {!isLoading && !hasError && filteredNotifications.length > 0 && (
-              <div>
-                {/* Unread Section */}
-                {unreadNotifications.length > 0 && (
-                  <div className="mb-8">
-                    <h2 className="text-sm font-semibold text-gray-300 mb-4 px-1 flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-[#EA8D23]" />
-                      Unread ({unreadNotifications.length})
-                    </h2>
-                    {unreadNotifications.map((notification) => (
-                      <NotificationCard
-                        key={notification._id}
-                        notification={notification}
-                        onMarkAsRead={handleMarkAsRead}
-                        onDelete={handleDeleteNotification}
-                        isLoading={isLoading}
-                      />
+                      >
+                        {type.label}
+                      </button>
                     ))}
                   </div>
-                )}
+                </div>
 
-                {/* Read Section */}
-                {filteredNotifications.filter((n) => n.read).length > 0 && (
-                  <div>
-                    <h2 className="text-sm font-semibold text-gray-500 mb-4 px-1">
-                      Read ({filteredNotifications.filter((n) => n.read).length})
-                    </h2>
-                    {filteredNotifications
-                      .filter((n) => n.read)
-                      .map((notification) => (
+                {/* Info Card */}
+                <div className="bg-gradient-to-b from-[#EA8D23]/10 to-[#EA8D23]/5 border border-[#EA8D23]/20 rounded-lg p-6">
+                  <h4 className="font-semibold text-[#EA8D23] mb-3 text-sm">
+                    💡 Quick Tips
+                  </h4>
+                  <ul className="text-xs text-gray-400 space-y-2">
+                    <li>• Mark notifications as read to keep track</li>
+                    <li>• Filter by type to find specific updates</li>
+                    <li>• Search to quickly locate notifications</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Notifications List */}
+            <div className="lg:col-span-3">
+              {/* Search Bar */}
+              {filteredNotifications.length > 0 && (
+                <div className="mb-6">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                    <input
+                      type="text"
+                      placeholder="Search notifications..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-gray-100 placeholder-gray-600 focus:outline-none focus:border-[#EA8D23]/50 focus:ring-1 focus:ring-[#EA8D23]/20 transition-all"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {isLoading && (
+                <div className="flex flex-col items-center justify-center py-16">
+                  <Loader className="w-12 h-12 text-[#EA8D23] animate-spin mb-4" />
+                  <p className="text-gray-400">Loading notifications...</p>
+                </div>
+              )}
+
+              {hasError && (
+                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-6 text-center">
+                  <AlertCircle className="w-8 h-8 text-red-400 mx-auto mb-3" />
+                  <p className="text-red-400 font-medium">
+                    Failed to load notifications
+                  </p>
+                  <button
+                    onClick={fetchNotifications}
+                    className="mt-4 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-lg transition-colors text-sm"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              )}
+
+              {!isLoading && !hasError && filteredNotifications.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-16 bg-gradient-to-b from-white/5 to-transparent border border-white/10 rounded-lg">
+                  <Bell className="w-16 h-16 text-gray-600 mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-300 mb-2">
+                    {selectedFilter === "all"
+                      ? "No notifications yet"
+                      : `No ${notificationTypes.find((t) => t.value === selectedFilter)
+                        ?.label
+                      }`}
+                  </h3>
+                  <p className="text-gray-500 text-sm text-center">
+                    {selectedFilter === "all"
+                      ? "Stay tuned! You'll get notified when there are updates."
+                      : "Try selecting a different filter."}
+                  </p>
+                </div>
+              )}
+
+              {!isLoading && !hasError && filteredNotifications.length > 0 && (
+                <div>
+                  {/* Unread Section */}
+                  {unreadNotifications.length > 0 && (
+                    <div className="mb-8">
+                      <h2 className="text-sm font-semibold text-gray-300 mb-4 px-1 flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-[#EA8D23]" />
+                        Unread ({unreadNotifications.length})
+                      </h2>
+                      {unreadNotifications.map((notification) => (
                         <NotificationCard
                           key={notification._id}
                           notification={notification}
@@ -537,14 +516,35 @@ const AdminNotifications = () => {
                           isLoading={isLoading}
                         />
                       ))}
-                  </div>
-                )}
-              </div>
-            )}
+                    </div>
+                  )}
+
+                  {/* Read Section */}
+                  {filteredNotifications.filter((n) => n.read).length > 0 && (
+                    <div>
+                      <h2 className="text-sm font-semibold text-gray-500 mb-4 px-1">
+                        Read ({filteredNotifications.filter((n) => n.read).length})
+                      </h2>
+                      {filteredNotifications
+                        .filter((n) => n.read)
+                        .map((notification) => (
+                          <NotificationCard
+                            key={notification._id}
+                            notification={notification}
+                            onMarkAsRead={handleMarkAsRead}
+                            onDelete={handleDeleteNotification}
+                            isLoading={isLoading}
+                          />
+                        ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 };
 
