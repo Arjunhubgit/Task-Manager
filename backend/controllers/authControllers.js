@@ -2,6 +2,7 @@ const User = require("../models/User");
 const AdminInvite = require("../models/AdminInvite");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { createNotification } = require("../utils/notificationService");
 
 // Generate JWT Token
 const generateToken = (userId) => {
@@ -98,7 +99,8 @@ const registerUser = async (req, res) => {
             role: userRole,
             parentAdminId,
             organizationName: userRole === "admin" ? organizationName : undefined,
-            isOnline: true
+            isOnline: true,
+            status: "online"
         });
 
         // Update the invite's usedBy with actual user ID
@@ -110,6 +112,17 @@ const registerUser = async (req, res) => {
             );
         }
 
+        if (userRole === "member" && parentAdminId) {
+            await createNotification({
+                userId: parentAdminId,
+                type: "team_member",
+                title: "New team member joined",
+                message: `${user.name} joined your team using an invite link.`,
+                relatedUserId: user._id,
+                eventKey: `team-member-invite:${user._id}`,
+            });
+        }
+
         res.status(201).json({
             _id: user._id,
             name: user.name,
@@ -118,6 +131,8 @@ const registerUser = async (req, res) => {
             role: user.role,
             parentAdminId: user.parentAdminId,
             organizationName: user.organizationName,
+            isOnline: user.isOnline,
+            status: user.status,
             token: generateToken(user._id),
             message: "Registration successful!"
         });
@@ -150,6 +165,8 @@ const loginUser = async (req, res) => {
             email: user.email,
             role: user.role,
             profileImageUrl: user.profileImageUrl,
+            isOnline: user.isOnline,
+            status: user.status,
             token: generateToken(user._id)
         });
     } catch (error) {
@@ -249,6 +266,17 @@ const googleLogin = async (req, res) => {
                     { $set: { "usedBy.$[elem].userId": user._id } },
                     { arrayFilters: [{ "elem.userId": null }] }
                 );
+            }
+
+            if (userRole === "member" && parentAdminId) {
+                await createNotification({
+                    userId: parentAdminId,
+                    type: "team_member",
+                    title: "New team member joined",
+                    message: `${user.name} joined your team using an invite link.`,
+                    relatedUserId: user._id,
+                    eventKey: `team-member-invite:${user._id}`,
+                });
             }
 
             res.status(201).json({
@@ -488,6 +516,7 @@ const hostLogin = async (req, res) => {
             role: "host",
             profileImageUrl: user.profileImageUrl,
             isOnline: true,
+            status: user.status,
             token: generateToken(user._id),
             message: "Host access granted - God Mode Active",
         });

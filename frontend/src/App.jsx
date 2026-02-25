@@ -27,10 +27,13 @@ import AdminNotifications from './pages/Admin/Notifications';
 
 // User Pages
 import UserDashboard from './pages/User/UserDashboard';
+import MyDay from './pages/User/MyDay';
 import MyTasks from './pages/User/MyTasks';
+import TaskCalendar from './pages/User/TaskCalendar';
 import ViewTaskDetails from './pages/User/ViewTaskDetails';
 import UserMessages from './pages/User/UserMessages'; // Keeping this as it was in your snippet
 import UserNotifications from './pages/User/Notifications';
+import Insights from './pages/User/Insights';
 
 // Host Pages
 import HostDashboard from './pages/Host/HostDashboard';
@@ -68,10 +71,13 @@ const App = () => {
           {/* User Protected */}
           <Route element={<PrivateRoute allowedRoles={['member']} />}>
             <Route path='user/dashboard' element={<UserDashboard />} />
+            <Route path='user/my-day' element={<MyDay />} />
             <Route path='user/tasks' element={<MyTasks />} />
+            <Route path='user/calendar' element={<TaskCalendar />} />
             <Route path='user/task/:id' element={<ViewTaskDetails />} />
             <Route path='user/messages' element={<UserMessages />} />
             <Route path='user/notifications' element={<UserNotifications />} />
+            <Route path='user/insights' element={<Insights />} />
           </Route>
 
           {/* Host Protected */}

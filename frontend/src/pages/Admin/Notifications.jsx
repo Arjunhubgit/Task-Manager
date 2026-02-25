@@ -22,7 +22,6 @@ import DashboardLayout from "../../components/layouts/DashboardLayout";
 const getNotificationIcon = (type) => {
   const iconClass = "w-5 h-5";
   const iconMap = {
-    task_assigned: <AlertCircle className={`${iconClass} text-blue-400`} />,
     task_completed: <CheckCircle className={`${iconClass} text-green-400`} />,
     comment: <MessageSquare className={`${iconClass} text-purple-400`} />,
     team_member: <UserPlus className={`${iconClass} text-orange-400`} />,
@@ -35,7 +34,6 @@ const getNotificationIcon = (type) => {
 // Notification Type Colors
 const getTypeColor = (type) => {
   const colors = {
-    task_assigned: "from-blue-500/10 to-blue-600/5 border-blue-500/20",
     task_completed: "from-green-500/10 to-green-600/5 border-green-500/20",
     comment: "from-purple-500/10 to-purple-600/5 border-purple-500/20",
     team_member: "from-orange-500/10 to-orange-600/5 border-orange-500/20",
@@ -173,7 +171,6 @@ const AdminNotifications = () => {
 
   const notificationTypes = [
     { value: "all", label: "All Notifications" },
-    { value: "task_assigned", label: "Task Assigned" },
     { value: "task_completed", label: "Task Completed" },
     { value: "comment", label: "Comments" },
     { value: "team_member", label: "Team Members" },

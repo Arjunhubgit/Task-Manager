@@ -1,4 +1,16 @@
-import { LuActivity, LuLayoutDashboard, LuUsers, LuClipboardCheck, LuSquarePlus, LuLogOut, LuShield, LuMailOpen, LuSettings, LuFileText, LuTrendingUp, LuBell } from "react-icons/lu";
+import {
+  LuLayoutDashboard,
+  LuUsers,
+  LuClipboardCheck,
+  LuSquarePlus,
+  LuShield,
+  LuSettings,
+  LuTrendingUp,
+  LuBell,
+  LuCalendarClock,
+  LuSunMedium,
+  LuMessagesSquare
+} from "react-icons/lu";
 import { FaChartColumn,  } from "react-icons/fa6";
 export const SIDE_MENU_DATA = [
   {
@@ -60,9 +72,39 @@ export const SIDE_MENU_USER_DATA = [
   },
   {
     id: "02",
+    label: "My Day",
+    icon: LuSunMedium,
+    path: "/user/my-day",
+  },
+  {
+    id: "03",
     label: "My Tasks",
     icon: LuClipboardCheck,
     path: "/user/tasks",
+  },
+  {
+    id: "04",
+    label: "Task Calendar",
+    icon: LuCalendarClock,
+    path: "/user/calendar",
+  },
+  {
+    id: "05",
+    label: "Messages",
+    icon: LuMessagesSquare,
+    path: "/user/messages",
+  },
+  {
+    id: "06",
+    label: "Notifications",
+    icon: LuBell,
+    path: "/user/notifications",
+  },
+  {
+    id: "07",
+    label: "Insights",
+    icon: LuTrendingUp,
+    path: "/user/insights",
   },
 ];
 

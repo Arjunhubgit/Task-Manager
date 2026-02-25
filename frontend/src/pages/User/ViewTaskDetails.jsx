@@ -4,7 +4,8 @@ import DashboardLayout from '../../components/layouts/DashboardLayout';
 import axiosInstance from '../../utils/axiosInstance';
 import { API_PATHS } from '../../utils/apiPaths';
 import { toast } from 'react-hot-toast'; // Used for notifications
-import { LuFileText, LuLink, LuClock, LuCalendar, LuUser } from 'react-icons/lu'; // Added necessary icons
+import { LuFileText, LuLink, LuClock, LuCalendar, LuUser, LuMessageSquare, LuSend } from 'react-icons/lu'; // Added necessary icons
+import { motion, AnimatePresence } from 'framer-motion';
 
 // --- Task Status Logic (Reused for consistent styling) ---
 const getStatusTagColor = (status) => {
@@ -24,6 +25,21 @@ const getStatusTagColor = (status) => {
 };
 // --- END Status Logic ---
 
+const pageVariants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.35, ease: 'easeOut', when: 'beforeChildren', staggerChildren: 0.06 },
+  },
+};
+
+const sectionVariants = {
+  hidden: { opacity: 0, y: 14 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.25, ease: 'easeOut' } },
+};
+const _FRAMER_MOTION_LOADED = Boolean(motion);
+
 const ViewTaskDetails = () => {
   const { id: taskId } = useParams(); // Fetches taskId from the route params
   
@@ -31,6 +47,8 @@ const ViewTaskDetails = () => {
   const [taskInfo, setTaskInfo] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [commentText, setCommentText] = useState('');
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
 
   // 2. Data Fetching Logic (Memoized with useCallback)
   const getTaskDetailsByID = useCallback(async () => {
@@ -89,6 +107,33 @@ const ViewTaskDetails = () => {
     }
   }, []);
 
+  const handleAddComment = useCallback(async () => {
+    if (!taskId || !commentText.trim() || isSubmittingComment) return;
+
+    setIsSubmittingComment(true);
+    try {
+      const response = await axiosInstance.post(API_PATHS.TASKS.ADD_TASK_COMMENT(taskId), {
+        text: commentText.trim(),
+      });
+
+      const createdComment = response.data?.comment;
+      if (createdComment) {
+        setTaskInfo((prev) => ({
+          ...prev,
+          comments: [...(prev?.comments || []), createdComment],
+        }));
+      }
+
+      setCommentText('');
+      toast.success('Comment added');
+    } catch (err) {
+      console.error("Error adding comment:", err);
+      toast.error("Failed to add comment");
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  }, [commentText, isSubmittingComment, taskId]);
+
   // 4. Side Effect (Fetch data on mount or taskId change)
   useEffect(() => {
     getTaskDetailsByID();
@@ -103,12 +148,36 @@ const ViewTaskDetails = () => {
     if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
+
+  const formatDateTime = (dateString) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const sortedComments = useMemo(() => {
+    return [...(taskInfo?.comments || [])].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }, [taskInfo?.comments]);
   
   // 6. Conditional Render Guards
   if (isLoading && !taskInfo) {
     return (
       <DashboardLayout activeMenu="My Tasks">
-        <div className="text-white text-center py-10">Loading Task Details...</div>
+        <motion.div
+          initial={{ opacity: 0.4 }}
+          animate={{ opacity: 1 }}
+          transition={{ repeat: Infinity, repeatType: "reverse", duration: 0.8 }}
+          className="text-white text-center py-10"
+        >
+          Loading Task Details...
+        </motion.div>
       </DashboardLayout>
     );
   }
@@ -116,9 +185,13 @@ const ViewTaskDetails = () => {
   if (error || !taskInfo) {
     return (
       <DashboardLayout activeMenu="My Tasks">
-        <div className="text-red-500 text-center py-10 border border-red-500/20 p-4 rounded-lg">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-red-500 text-center py-10 border border-red-500/20 p-4 rounded-lg"
+        >
           {error || "Task details could not be found."}
-        </div>
+        </motion.div>
       </DashboardLayout>
     );
   }
@@ -126,10 +199,18 @@ const ViewTaskDetails = () => {
   // 7. Render (Themed and Structured UI)
   return (
     <DashboardLayout activeMenu="My Tasks">
-      <div className="p-4 md:p-8 bg-[#1a1a1a]/40 backdrop-blur-xl border border-white/5 rounded-2xl shadow-xl my-5">
+      <motion.div
+        variants={pageVariants}
+        initial="hidden"
+        animate="visible"
+        className="p-4 md:p-8 bg-[#1a1a1a]/40 backdrop-blur-xl border border-white/5 rounded-2xl shadow-xl my-5"
+      >
         
         {/* Title and Status Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-white/10 pb-4 mb-6">
+        <motion.div
+          variants={sectionVariants}
+          className="flex flex-col md:flex-row md:items-center justify-between border-b border-white/10 pb-4 mb-6"
+        >
           <h2 className="text-3xl font-extrabold text-white tracking-tight mb-2 md:mb-0">
             {taskInfo.title}
           </h2>
@@ -137,21 +218,21 @@ const ViewTaskDetails = () => {
           <div className={`text-xs font-bold py-1 px-4 rounded-full uppercase ${statusTagClass}`}>
             {taskInfo.status}
           </div>
-        </div>
+        </motion.div>
 
         {/* Task Details Grid - 2/3 for content, 1/3 for metadata */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 text-white/80">
+        <motion.div variants={sectionVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-8 text-white/80">
           
           {/* Column 1 (2/3 width) - Description and Attachments */}
           <div className="lg:col-span-2 space-y-8">
-            <section>
+            <motion.section variants={sectionVariants} whileHover={{ y: -2 }}>
               <h3 className="text-xl font-semibold mb-3 text-white">Description</h3>
               <p className="text-white/70 leading-relaxed whitespace-pre-wrap">{taskInfo.description}</p>
-            </section>
+            </motion.section>
             
             {/* Attachments Section */}
             {taskInfo.attachments && taskInfo.attachments.length > 0 && (
-              <section>
+              <motion.section variants={sectionVariants} whileHover={{ y: -2 }}>
                 <h3 className="text-xl font-semibold mb-3 text-white flex items-center gap-2">
                    <LuFileText className="text-lg text-[#06b6d4]" /> Task Attachments
                 </h3>
@@ -168,15 +249,78 @@ const ViewTaskDetails = () => {
                     </li>
                   ))}
                 </ul>
-              </section>
+              </motion.section>
             )}
+
+            <motion.section
+              variants={sectionVariants}
+              whileHover={{ y: -2 }}
+              className="bg-gray-800/50 p-5 rounded-xl border border-white/5 shadow-md"
+            >
+              <h3 className="text-xl font-semibold mb-4 text-white flex items-center gap-2">
+                <LuMessageSquare className="text-lg text-violet-400" /> Comments
+              </h3>
+
+              <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                {sortedComments.length === 0 && (
+                  <p className="text-sm text-white/50">No comments yet. Add the first comment for this task.</p>
+                )}
+
+                <AnimatePresence initial={false}>
+                  {sortedComments.map((comment, index) => (
+                  <motion.div
+                    key={comment._id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.2, delay: index * 0.02 }}
+                    className="rounded-lg border border-white/10 bg-black/20 p-3"
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <p className="text-sm font-semibold text-white">
+                        {comment.userId?.name || 'Unknown User'}
+                      </p>
+                      <p className="text-xs text-white/40">{formatDateTime(comment.createdAt)}</p>
+                    </div>
+                    <p className="text-sm text-white/80 whitespace-pre-wrap">{comment.text}</p>
+                  </motion.div>
+                ))}
+                </AnimatePresence>
+              </div>
+
+              <div className="mt-4 border-t border-white/10 pt-4">
+                <textarea
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  placeholder="Write a comment about this task..."
+                  rows={3}
+                  maxLength={2000}
+                  className="w-full rounded-lg bg-black/30 border border-white/10 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-violet-500/50"
+                />
+                <div className="mt-2 flex items-center justify-between">
+                  <p className="text-xs text-white/40">{commentText.length}/2000</p>
+                  <button
+                    onClick={handleAddComment}
+                    disabled={!commentText.trim() || isSubmittingComment}
+                    className="inline-flex items-center gap-2 rounded-lg bg-violet-500/20 border border-violet-500/40 px-3 py-2 text-sm font-medium text-violet-300 hover:bg-violet-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <LuSend className="text-sm" />
+                    {isSubmittingComment ? 'Posting...' : 'Post Comment'}
+                  </button>
+                </div>
+              </div>
+            </motion.section>
           </div>
           
           {/* Column 2 (1/3 width) - Metadata and Checklist */}
           <div className="space-y-6 lg:col-span-1">
             
             {/* Metadata Card */}
-            <div className="bg-gray-800/50 p-5 rounded-xl border border-white/5 shadow-md">
+            <motion.div
+                variants={sectionVariants}
+                whileHover={{ y: -2 }}
+                className="bg-gray-800/50 p-5 rounded-xl border border-white/5 shadow-md"
+            >
                 <h4 className="text-lg font-bold mb-4 text-white flex items-center gap-2">
                     <LuCalendar className="text-lg text-amber-500" /> Task Timeline
                 </h4>
@@ -195,17 +339,27 @@ const ViewTaskDetails = () => {
                         <span className="text-white/70">{taskInfo.createdBy?.name || 'Admin'}</span>
                     </p>
                 </div>
-            </div>
+            </motion.div>
 
             {/* ToDo Checklist Card */}
             {taskInfo.todoChecklist && taskInfo.todoChecklist.length > 0 && (
-              <div className="bg-gray-800/50 p-5 rounded-xl border border-white/5 shadow-md">
+              <motion.div
+                variants={sectionVariants}
+                whileHover={{ y: -2 }}
+                className="bg-gray-800/50 p-5 rounded-xl border border-white/5 shadow-md"
+              >
                 <h4 className="text-lg font-bold mb-4 text-white flex items-center gap-2">
                      ToDo Checklist
                 </h4>
                 <ul className="space-y-3">
                   {taskInfo.todoChecklist.map((item, index) => (
-                    <li key={index} className="flex items-start text-sm">
+                    <motion.li
+                      key={index}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.2, delay: index * 0.02 }}
+                      className="flex items-start text-sm"
+                    >
                       <input
                         type="checkbox"
                         checked={item.completed}
@@ -215,15 +369,15 @@ const ViewTaskDetails = () => {
                       <span className={`ml-3 ${item.completed ? 'line-through text-white/40' : 'text-white/90'}`}>
                         {item.text}
                       </span>
-                    </li>
+                    </motion.li>
                   ))}
                 </ul>
-              </div>
+              </motion.div>
             )}
           </div>
 
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     </DashboardLayout>
   );
 };

@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect } from "react";
 import axiosInstance from "../utils/axiosInstance";
 import { API_PATHS } from "../utils/apiPaths";
+import socket from "../services/socket";
 
 export const UserContext = createContext();
 
@@ -8,6 +9,17 @@ const UserProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true); 
     const [notifications, setNotifications] = useState([]); // Notifications state
+    const userId = user?._id;
+    const currentStatus = user?.status || "online";
+    const normalizeUser = (userData) => {
+        if (!userData) return null;
+        const status = userData.status || "online";
+        return {
+            ...userData,
+            status,
+            isOnline: typeof userData.isOnline === "boolean" ? userData.isOnline : status !== "invisible"
+        };
+    };
 
     useEffect(() => {
         if (user) return;
@@ -21,10 +33,9 @@ const UserProvider = ({ children }) => {
         const fetchUser = async () => {
             try {
                 const response = await axiosInstance.get(API_PATHS.AUTH.GET_PROFILE);
-                setUser(response.data);
+                setUser(normalizeUser(response.data));
             } catch (error) {
                 console.error("Failed to fetch user profile:", error);
-                clearUser();
                 localStorage.removeItem("token");
                 localStorage.removeItem("role");
                 setUser(null);
@@ -35,6 +46,30 @@ const UserProvider = ({ children }) => {
 
         fetchUser();
     }, [user]);
+
+    // Broadcast presence so admin/team pages update status in real-time on login.
+    useEffect(() => {
+        if (!userId) return;
+
+        const emitPresence = () => {
+            socket.emit("join", userId);
+            socket.emit("updateUserStatus", {
+                userId,
+                status: currentStatus
+            });
+        };
+
+        if (!socket.connected) {
+            socket.connect();
+        }
+
+        emitPresence();
+        socket.on("connect", emitPresence);
+
+        return () => {
+            socket.off("connect", emitPresence);
+        };
+    }, [userId, currentStatus]);
 
     // --- FIXED: Fetch and Poll Notifications ---
     useEffect(() => {
@@ -63,7 +98,7 @@ const UserProvider = ({ children }) => {
     }, [user]);
 
     const updateUser = (userData) => {
-        setUser(userData);
+        setUser(normalizeUser(userData));
         if (userData && userData.token) {
             localStorage.setItem("token", userData.token);
             localStorage.setItem("role", userData.role);
@@ -73,12 +108,25 @@ const UserProvider = ({ children }) => {
 
     // Update user status and sync with context
     const updateUserStatus = (newStatus) => {
-        if (user) {
-            setUser({
-                ...user,
-                status: newStatus
-            });
+        if (!user || !user._id) return;
+
+        setUser((prev) => (
+            prev
+                ? {
+                    ...prev,
+                    status: newStatus,
+                    isOnline: newStatus !== "invisible"
+                }
+                : prev
+        ));
+
+        if (!socket.connected) {
+            socket.connect();
         }
+        socket.emit("updateUserStatus", {
+            userId: user._id,
+            status: newStatus
+        });
     };
 
     const clearUser = async () => {
@@ -90,6 +138,13 @@ const UserProvider = ({ children }) => {
     } catch (err) {
         console.error('Logout API call failed:', err);
     } finally {
+        if (user?._id) {
+            socket.emit("updateUserStatus", {
+                userId: user._id,
+                status: "invisible"
+            });
+        }
+        socket.disconnect();
         // 2. Clear local data regardless of API success
         setUser(null);
         localStorage.removeItem("token");
@@ -154,6 +209,23 @@ const UserProvider = ({ children }) => {
         }
     };
 
+    const generateNotificationDigest = async () => {
+        if (!user || !user._id) return { digest: "", highlights: [] };
+        try {
+            const response = await axiosInstance.post(
+                API_PATHS.NOTIFICATIONS.GENERATE_DIGEST(user._id),
+                {}
+            );
+            return {
+                digest: response.data?.digest || "",
+                highlights: response.data?.highlights || [],
+            };
+        } catch (error) {
+            console.error("Error generating notification digest:", error);
+            return { digest: "", highlights: [] };
+        }
+    };
+
     return (
         <UserContext.Provider value={{ 
             user, 
@@ -165,7 +237,8 @@ const UserProvider = ({ children }) => {
             markNotificationAsRead,
             deleteNotification,
             markAllNotificationsAsRead,
-            deleteAllNotifications
+            deleteAllNotifications,
+            generateNotificationDigest
         }}>
             {children}
         </UserContext.Provider>

@@ -1,6 +1,10 @@
 const Task = require("../models/Task");
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
+const {
+  createNotification,
+  createNotificationsForUsers,
+} = require("../utils/notificationService");
 
 
 // @desc    Create a new admin (Host only)
@@ -33,6 +37,15 @@ const createAdmin = async (req, res) => {
       password: hashedPassword,
       role: "admin",
       parentHostId: hostId, // Set the parent HOST
+    });
+
+    await createNotification({
+      userId: hostId,
+      type: "team_member",
+      title: "New admin added",
+      message: `${user.name} was added as an admin.`,
+      relatedUserId: user._id,
+      eventKey: `team-admin-added:${user._id}`,
     });
 
     if (user) {
@@ -83,6 +96,32 @@ const createMember = async (req, res) => {
       role: "member",
       parentAdminId: adminId, // Set the parent ADMIN
     });
+
+    await createNotification({
+      userId: adminId,
+      type: "team_member",
+      title: "Team member added",
+      message: `${user.name} was added to your team.`,
+      relatedUserId: user._id,
+      eventKey: `team-member-added:${user._id}`,
+    });
+
+    const teammateIds = await User.find({
+      parentAdminId: adminId,
+      role: "member",
+      _id: { $ne: user._id },
+    }).select("_id");
+
+    await createNotificationsForUsers(
+      teammateIds.map((member) => member._id),
+      {
+        type: "team_member",
+        title: "New teammate joined",
+        message: `${user.name} joined your team.`,
+        relatedUserId: user._id,
+        eventKey: `teammate-joined:${user._id}`,
+      }
+    );
 
     if (user) {
       res.status(201).json({
@@ -225,6 +264,8 @@ const updateUser = async (req, res) => {
         return res.status(400).json({ message: "Invalid status value" });
       }
       updateData.status = status;
+      updateData.isOnline = status !== "invisible";
+      updateData.lastLogoutTime = status === "invisible" ? new Date() : null;
     }
 
     // Handle role change

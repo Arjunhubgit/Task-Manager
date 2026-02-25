@@ -15,7 +15,9 @@ const notificationSchema = new mongoose.Schema(
         "comment",
         "team_member",
         "status_update",
-        "deadline_reminder"
+        "deadline_reminder",
+        "message",
+        "mention"
       ],
       required: true
     },
@@ -38,9 +40,25 @@ const notificationSchema = new mongoose.Schema(
     relatedUserId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User"
+    },
+    relatedConversationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Conversation"
+    },
+    eventKey: {
+      type: String,
+      trim: true
     }
   },
   { timestamps: true }
+);
+
+notificationSchema.index(
+  { userId: 1, eventKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { eventKey: { $type: "string" } },
+  }
 );
 
 module.exports = mongoose.model("Notification", notificationSchema);

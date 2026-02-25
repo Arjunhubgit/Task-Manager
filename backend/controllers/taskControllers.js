@@ -1,45 +1,102 @@
 const Task = require("../models/Task");
 const User = require("../models/User");
-const Notification = require("../models/Notification");
 const Groq = require("groq-sdk"); // 
 const jwt = require("jsonwebtoken");
 const { logActivity } = require("../utils/auditLogger");
+const {
+    createNotificationsForUsers,
+    buildTaskCompletionCopy,
+    buildTaskStatusUpdateCopy,
+    uniqueIds,
+} = require("../utils/notificationService");
 
 // Initialize Groq Client
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
 
 // Config: Use Llama 3 for best speed/intelligence balance
-const AI_MODEL = "llama-3.3-70b-versatile, llama-3.3-70b-instant, groq/compound, groq/compound-mini"; // Fallback to instant if needed
+const AI_MODEL = "llama-3.3-70b-versatile";
 
 // =====================================================================
 // --- HELPER: AI PRIORITY & SUMMARY ---
 // =====================================================================
 
-const sendTaskNotifications = async (task, creatorId, type = 'task_assigned') => {
-    try {
-        const creatorUser = await User.findById(creatorId);
-        const creatorName = creatorUser?.name || 'Admin';
+const getActorName = async (actorId) => {
+    const actor = await User.findById(actorId).select("name");
+    return actor?.name || "A team member";
+};
 
-        for (const userId of task.assignedTo) {
-            // Don't notify the person who performed the action
-            if (userId.toString() !== creatorId.toString()) {
-                const notification = new Notification({
-                    userId,
-                    type,
-                    title: type === 'task_assigned' ? 'New task assigned' : 'Task updated',
-                    message: type === 'task_assigned' 
-                        ? `You have been assigned "${task.title}" by ${creatorName}` 
-                        : `The task "${task.title}" has been updated by ${creatorName}`,
-                    relatedTaskId: task._id,
-                    relatedUserId: creatorId,
-                });
-                await notification.save();
-                console.log(`✅ Notification (${type}) created for user ${userId}`);
-            }
-        }
-    } catch (error) {
-        console.error("Error in sendTaskNotifications:", error.message);
-    }
+const getTaskRecipients = (task) =>
+    uniqueIds([...(task.assignedTo || []), task.createdBy].filter(Boolean));
+
+const canUserAccessTask = (task, user) => {
+    if (!task || !user) return false;
+    if (user.role === "admin") return true;
+    if (task.createdBy?.toString() === user._id.toString()) return true;
+    return (task.assignedTo || []).some((userId) => userId.toString() === user._id.toString());
+};
+
+const notifyTaskStatusUpdate = async (task, actorId, previousStatus, nextStatus, actorName) => {
+    const recipients = getTaskRecipients(task);
+    const content = buildTaskStatusUpdateCopy({
+        taskTitle: task.title,
+        previousStatus,
+        nextStatus,
+        updatedByName: actorName,
+    });
+
+    await createNotificationsForUsers(
+        recipients,
+        {
+            type: "status_update",
+            title: content.title,
+            message: content.message,
+            relatedTaskId: task._id,
+            relatedUserId: actorId,
+            eventKey: `status:${task._id}:${previousStatus}:${nextStatus}:${Date.now()}`
+        },
+        { skipUserId: actorId }
+    );
+};
+
+const notifyTaskCompleted = async (task, actorId, actorName) => {
+    const recipients = getTaskRecipients(task);
+    const content = buildTaskCompletionCopy({
+        task,
+        completedByName: actorName,
+        completedAt: task.updatedAt || new Date(),
+    });
+
+    await createNotificationsForUsers(
+        recipients,
+        (recipientId) => ({
+            type: "task_completed",
+            title: content.title,
+            message: content.message,
+            relatedTaskId: task._id,
+            relatedUserId: actorId,
+            eventKey: `task-completed:${task._id}:${recipientId}:${task.updatedAt || Date.now()}`
+        }),
+        { skipUserId: actorId }
+    );
+};
+
+const notifyTaskComment = async (task, actorId, actorName, commentText, commentId) => {
+    const recipients = getTaskRecipients(task);
+    const trimmed = String(commentText || "").trim();
+    const preview = trimmed.length > 120 ? `${trimmed.slice(0, 117)}...` : trimmed;
+
+    await createNotificationsForUsers(
+        recipients,
+        {
+            type: "comment",
+            title: "New task comment",
+            message: `${actorName} commented on "${task.title}": "${preview}"`,
+            relatedTaskId: task._id,
+            relatedUserId: actorId,
+            eventKey: `task-comment:${task._id}:${commentId}`,
+        },
+        { skipUserId: actorId }
+    );
 };
 
 const getAIPriorityAndSummary = async (taskDescription, userRole) => {
@@ -83,10 +140,25 @@ const getAIPriorityAndSummary = async (taskDescription, userRole) => {
 // @desc    Get all tasks
 const getTasks = async (req, res) => {
     try {
-        const { status, assignedTo } = req.query;
+        const { status, assignedTo, priority, dueFrom, dueTo, hasChecklist, hasComments, tags } = req.query;
         let filter = {};
         if (status) filter.status = status;
         if (assignedTo) filter.assignedTo = assignedTo;
+        if (priority) filter.priority = priority;
+        if (tags) {
+            filter.tags = { $in: String(tags).split(",").map((tag) => tag.trim()).filter(Boolean) };
+        }
+        if (dueFrom || dueTo) {
+            filter.dueDate = {};
+            if (dueFrom) filter.dueDate.$gte = new Date(dueFrom);
+            if (dueTo) filter.dueDate.$lte = new Date(dueTo);
+        }
+        if (hasChecklist === "true") {
+            filter.todoChecklist = { $exists: true, $not: { $size: 0 } };
+        }
+        if (hasComments === "true") {
+            filter.comments = { $exists: true, $not: { $size: 0 } };
+        }
 
         let tasks;
         if (req.user.role === "admin") {
@@ -116,7 +188,10 @@ const getTasks = async (req, res) => {
 // @desc    Get task by ID
 const getTaskById = async (req, res) => {
     try {
-        const task = await Task.findById(req.params.id).populate("assignedTo", "name email profileImageUrl");
+        const task = await Task.findById(req.params.id)
+            .populate("assignedTo", "name email profileImageUrl")
+            .populate("createdBy", "name email profileImageUrl")
+            .populate("comments.userId", "name email profileImageUrl role");
         if (!task) return res.status(404).json({ message: "Task not found" });
         res.json(task);
     } catch (error) {
@@ -158,9 +233,6 @@ const createTask = async (req, res) => {
             req
         );
 
-        // �🔔 Notify Assignees
-        await sendTaskNotifications(task, req.user._id, 'task_assigned');
-
         res.status(201).json({ message: "Task created successfully", task });
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
@@ -173,15 +245,26 @@ const updateTask = async (req, res) => {
         const task = await Task.findById(req.params.id);
         if (!task) return res.status(404).json({ message: "Task not found" });
 
-        // Keep track of old assignees to check for new ones if needed
-        const oldAssignees = task.assignedTo.map(id => id.toString());
+        const previousStatus = task.status;
+        const previousDueDate = task.dueDate ? new Date(task.dueDate).getTime() : null;
+        const previousAssignees = uniqueIds(task.assignedTo).sort();
 
         task.title = req.body.title || task.title;
         task.description = req.body.description || task.description;
+        task.status = req.body.status || task.status;
         task.priority = req.body.priority || task.priority;
         task.dueDate = req.body.dueDate || task.dueDate;
         task.todoChecklist = req.body.todoChecklist || task.todoChecklist;
         task.attachments = req.body.attachments || task.attachments;
+        if (Array.isArray(req.body.tags)) {
+            task.tags = req.body.tags.map((tag) => String(tag).trim()).filter(Boolean);
+        }
+
+        if (task.status === "Completed" && !task.completedAt) {
+            task.completedAt = new Date();
+        } else if (task.status !== "Completed") {
+            task.completedAt = null;
+        }
 
         if (req.body.assignedTo) {
             if (!Array.isArray(req.body.assignedTo)) return res.status(400).json({ message: "assignedTo must be an array" });
@@ -189,6 +272,14 @@ const updateTask = async (req, res) => {
         }
 
         const updatedTask = await task.save();
+        const actorName = await getActorName(req.user._id);
+        const nextDueDate = updatedTask.dueDate ? new Date(updatedTask.dueDate).getTime() : null;
+        const nextAssignees = uniqueIds(updatedTask.assignedTo).sort();
+
+        const dueDateChanged = previousDueDate !== nextDueDate;
+        const assigneesChanged =
+            previousAssignees.length !== nextAssignees.length ||
+            previousAssignees.some((id, index) => id !== nextAssignees[index]);
 
         // � Log activity
         await logActivity(
@@ -200,7 +291,32 @@ const updateTask = async (req, res) => {
         );
 
         // �🔔 Notify assigned members of the update
-        await sendTaskNotifications(updatedTask, req.user._id, 'status_update');
+        if (previousStatus !== updatedTask.status) {
+            if (updatedTask.status === "Completed") {
+                await notifyTaskCompleted(updatedTask, req.user._id, actorName);
+            } else {
+                await notifyTaskStatusUpdate(
+                    updatedTask,
+                    req.user._id,
+                    previousStatus,
+                    updatedTask.status,
+                    actorName
+                );
+            }
+        } else if (dueDateChanged || assigneesChanged) {
+            await createNotificationsForUsers(
+                getTaskRecipients(updatedTask),
+                {
+                    type: "status_update",
+                    title: "Task details updated",
+                    message: `${actorName} updated details for "${updatedTask.title}".`,
+                    relatedTaskId: updatedTask._id,
+                    relatedUserId: req.user._id,
+                    eventKey: `task-details:${updatedTask._id}:${Date.now()}`,
+                },
+                { skipUserId: req.user._id }
+            );
+        }
 
         res.json({ message: "Task updated successfully", updatedTask });
     } catch (error) {
@@ -232,56 +348,29 @@ const updateTaskStatus = async (req, res) => {
         const task = await Task.findById(req.params.id);
         if (!task) return res.status(404).json({ message: "Task not found" });
 
-        const isAssigned = task.assignedTo.some(userId => userId.toString() === req.user._id.toString());
+        const isAssigned = task.assignedTo.some((userId) => userId.toString() === req.user._id.toString());
         if (!isAssigned && req.user.role !== "admin") return res.status(403).json({ message: "Not authorized" });
 
         const oldStatus = task.status;
         task.status = req.body.status || task.status;
-        
+
         if (task.status === "Completed") {
-            task.todoChecklist.forEach(item => item.completed = true);
+            task.todoChecklist.forEach((item) => (item.completed = true));
             task.progress = 100;
+            task.completedAt = new Date();
+        } else {
+            task.completedAt = null;
         }
-        
+
         await task.save();
 
-        // Create notifications when status changes to "Completed"
-        if (task.status === "Completed" && oldStatus !== "Completed") {
-            try {
-                const currentUser = await User.findById(req.user._id);
-                const currentUserName = currentUser?.name || "User";
+        if (oldStatus !== task.status) {
+            const actorName = await getActorName(req.user._id);
 
-                // Notify admin about task completion
-                if (task.createdBy) {
-                    const notification = new Notification({
-                        userId: task.createdBy,
-                        type: "task_completed",
-                        title: "Task completed",
-                        message: `${currentUserName} marked "${task.title}" as completed`,
-                        relatedTaskId: task._id,
-                        relatedUserId: req.user._id,
-                    });
-                    await notification.save();
-                    console.log(`✅ Task completion notification created for admin`);
-                }
-
-                // Notify other team members assigned to the task
-                for (const userId of task.assignedTo) {
-                    if (userId.toString() !== req.user._id.toString()) {
-                        const notification = new Notification({
-                            userId,
-                            type: "task_completed",
-                            title: "Task completed",
-                            message: `${currentUserName} marked "${task.title}" as completed`,
-                            relatedTaskId: task._id,
-                            relatedUserId: req.user._id,
-                        });
-                        await notification.save();
-                        console.log(`✅ Task completion notification created for user ${userId}`);
-                    }
-                }
-            } catch (notificationError) {
-                console.error("Error creating completion notifications:", notificationError.message);
+            if (task.status === "Completed") {
+                await notifyTaskCompleted(task, req.user._id, actorName);
+            } else {
+                await notifyTaskStatusUpdate(task, req.user._id, oldStatus, task.status, actorName);
             }
         }
 
@@ -298,25 +387,127 @@ const updateTaskChecklist = async (req, res) => {
         const task = await Task.findById(req.params.id);
         if (!task) return res.status(404).json({ message: "Task not found" });
 
-        if (!task.assignedTo.some(id => id.equals(req.user._id)) && req.user.role !== "admin") {
+        if (!task.assignedTo.some((id) => id.equals(req.user._id)) && req.user.role !== "admin") {
             return res.status(403).json({ message: "Not authorized" });
         }
 
+        const oldStatus = task.status;
         task.todoChecklist = todoChecklist;
-        const completedCount = task.todoChecklist.filter(item => item.completed).length;
+        const completedCount = task.todoChecklist.filter((item) => item.completed).length;
         task.progress = task.todoChecklist.length > 0 ? Math.round((completedCount / task.todoChecklist.length) * 100) : 0;
 
         if (task.progress === 100) task.status = "Completed";
         else if (task.progress > 0) task.status = "In Progress";
         else task.status = "Pending";
 
+        task.completedAt = task.status === "Completed" ? new Date() : null;
+
         await task.save();
+        const actorName = await getActorName(req.user._id);
+
+        if (oldStatus !== task.status) {
+            if (task.status === "Completed") {
+                await notifyTaskCompleted(task, req.user._id, actorName);
+            } else {
+                await notifyTaskStatusUpdate(task, req.user._id, oldStatus, task.status, actorName);
+            }
+        }
+
         const updatedTask = await Task.findById(req.params.id).populate("assignedTo", "name email profileImageUrl");
         res.json({ message: "Task checklist updated", task: updatedTask });
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
     }
 };
+
+const startOfDay = (dateInput) => {
+    const value = new Date(dateInput);
+    value.setHours(0, 0, 0, 0);
+    return value;
+};
+
+const endOfDay = (dateInput) => {
+    const value = new Date(dateInput);
+    value.setHours(23, 59, 59, 999);
+    return value;
+};
+
+const fallbackTaskAssist = (task, mode) => {
+    if (mode === "summary") {
+        return `Task "${task.title}" is currently ${task.status.toLowerCase()} with ${task.progress || 0}% progress. Focus on the next checklist item and due date commitments.`;
+    }
+    if (mode === "subtasks") {
+        const checklist = (task.todoChecklist || []).map((item, index) => `${index + 1}. ${item.text}`);
+        if (checklist.length > 0) {
+            return `Suggested execution order:\n${checklist.join("\n")}`;
+        }
+        return `1. Clarify deliverable for "${task.title}"\n2. Break work into 3 small steps\n3. Execute and update status`;
+    }
+    return `Next step: complete the highest-impact pending checklist item on "${task.title}" and post a short progress update comment.`;
+};
+
+// @desc    Add task comment
+const addTaskComment = async (req, res) => {
+    try {
+        const { text } = req.body;
+        const commentText = String(text || "").trim();
+
+        if (!commentText) {
+            return res.status(400).json({ message: "Comment text is required" });
+        }
+
+        const task = await Task.findById(req.params.id);
+        if (!task) return res.status(404).json({ message: "Task not found" });
+
+        if (!canUserAccessTask(task, req.user)) {
+            return res.status(403).json({ message: "Not authorized" });
+        }
+
+        task.comments.push({
+            userId: req.user._id,
+            text: commentText,
+        });
+
+        await task.save();
+
+        const createdComment = task.comments[task.comments.length - 1];
+        const actorName = await getActorName(req.user._id);
+        await notifyTaskComment(task, req.user._id, actorName, commentText, createdComment._id);
+
+        await task.populate("comments.userId", "name email profileImageUrl role");
+        const populatedComment = task.comments.id(createdComment._id);
+
+        res.status(201).json({
+            message: "Comment added successfully",
+            comment: populatedComment,
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+};
+
+// @desc    Get task comments
+const getTaskComments = async (req, res) => {
+    try {
+        const task = await Task.findById(req.params.id).populate(
+            "comments.userId",
+            "name email profileImageUrl role"
+        );
+        if (!task) return res.status(404).json({ message: "Task not found" });
+
+        if (!canUserAccessTask(task, req.user)) {
+            return res.status(403).json({ message: "Not authorized" });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: task.comments || [],
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+};
+
 
 // @desc    Dashboard data (Admin)
 const getDashboardData = async (req, res) => {
@@ -362,12 +553,21 @@ const getUserDashboardData = async (req, res) => {
         // 1. General Statistics
         const totalTasks = await Task.countDocuments({ assignedTo: userId });
         const pendingTasks = await Task.countDocuments({ assignedTo: userId, status: "Pending" });
+        const inProgressTasks = await Task.countDocuments({ assignedTo: userId, status: "In Progress" });
         const completedTasks = await Task.countDocuments({ assignedTo: userId, status: "Completed" });
         const overdueTasksCount = await Task.countDocuments({ 
             assignedTo: userId, 
             status: { $ne: "Completed" }, 
             dueDate: { $lt: now } 
         });
+        const todayStart = startOfDay(now);
+        const todayEnd = endOfDay(now);
+        const dueTodayCount = await Task.countDocuments({
+            assignedTo: userId,
+            status: { $ne: "Completed" },
+            dueDate: { $gte: todayStart, $lte: todayEnd },
+        });
+        const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
         
         // 2. Chart Distributions
         const taskStatuses = ["Pending", "In Progress", "Completed"];
@@ -406,6 +606,40 @@ const getUserDashboardData = async (req, res) => {
             dueDate: { $gte: now, $lte: threeDaysFromNow }
         }).sort({ dueDate: 1 }).limit(5).select("title dueDate priority aiSummary");
 
+        const riskRadar = await Task.find({
+            assignedTo: userId,
+            status: { $ne: "Completed" },
+            dueDate: { $gte: now, $lte: threeDaysFromNow },
+            $or: [{ priority: "High" }, { progress: { $lt: 50 } }],
+        })
+            .sort({ dueDate: 1, priority: -1 })
+            .limit(5)
+            .select("title dueDate priority progress status aiSummary");
+
+        const priorityScore = { High: 3, Medium: 2, Low: 1 };
+        const actionableTasks = await Task.find({
+            assignedTo: userId,
+            status: { $ne: "Completed" },
+        })
+            .select("title dueDate priority progress status aiSummary")
+            .limit(25);
+
+        const nextBestTask = actionableTasks
+            .map((task) => {
+                const dueTime = task.dueDate ? new Date(task.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+                const hoursToDue = Number.isFinite(dueTime) ? (dueTime - now.getTime()) / (1000 * 60 * 60) : 9999;
+                const overduePenalty = hoursToDue < 0 ? 100 : 0;
+                const urgencyBonus = hoursToDue <= 24 ? 40 : hoursToDue <= 72 ? 20 : 0;
+                const progressPenalty = Math.max(0, 60 - (task.progress || 0));
+                const score =
+                    overduePenalty +
+                    urgencyBonus +
+                    (priorityScore[task.priority] || 1) * 10 +
+                    progressPenalty;
+                return { ...task.toObject(), score };
+            })
+            .sort((a, b) => b.score - a.score)[0] || null;
+
         // 4. Recent Tasks
         const recentTasks = await Task.find({ assignedTo: userId })
             .sort({ createdAt: -1 })
@@ -416,13 +650,22 @@ const getUserDashboardData = async (req, res) => {
             statistics: { 
                 totalTasks, 
                 pendingTasks, 
+                inProgressTasks,
                 completedTasks, 
                 overdueTasks: overdueTasksCount 
             }, 
+            todaySnapshot: {
+                dueToday: dueTodayCount,
+                overdue: overdueTasksCount,
+                inProgress: inProgressTasks,
+                completionRate,
+            },
             charts: { taskDistribution, taskPriorityLevels }, 
             recentTasks,
             upcomingTasks,      // NEW
-            overdueTasksList    // NEW
+            overdueTasksList,    // NEW
+            nextBestTask,
+            riskRadar,
         });     
     } catch (error) {
         res.status(500).json({ message: "Server error", error: error.message });
@@ -465,9 +708,6 @@ const createTaskFromAI = async (req, res) => {
         assignedTo: assignedTo || [req.user._id], // Use provided assignees or default to creator
         createdBy: req.user._id
       });
-
-      // 🔔 Notify Assignees
-      await sendTaskNotifications(newTask, req.user._id, 'task_assigned');
 
       res.status(201).json(newTask);
 
@@ -567,8 +807,371 @@ const getAllTasksGlobal = async (req, res) => {
     }
 };
 
+// @desc    Member agenda grouped by urgency
+// @route   GET /api/tasks/member/agenda
+// @access  Private (Member)
+const getMemberAgenda = async (req, res) => {
+    try {
+        const windowType = req.query.window === "week" ? "week" : "today";
+        const userId = req.user._id;
+        const now = new Date();
+        const todayStart = startOfDay(now);
+        const todayEnd = endOfDay(now);
+        const tomorrowStart = new Date(todayStart);
+        tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+        const tomorrowEnd = endOfDay(tomorrowStart);
+
+        const rangeEnd = new Date(todayEnd);
+        rangeEnd.setDate(rangeEnd.getDate() + (windowType === "week" ? 7 : 2));
+
+        const agendaTasks = await Task.find({
+            assignedTo: userId,
+            status: { $ne: "Completed" },
+            dueDate: { $exists: true, $ne: null, $lte: rangeEnd },
+        })
+            .sort({ dueDate: 1, priority: -1 })
+            .select("title description dueDate priority status progress todoChecklist comments aiSummary tags createdAt updatedAt");
+
+        const grouped = {
+            overdue: [],
+            today: [],
+            tomorrow: [],
+            later: [],
+            quickWins: [],
+        };
+
+        agendaTasks.forEach((taskDoc) => {
+            const task = taskDoc.toObject();
+            const due = task.dueDate ? new Date(task.dueDate) : null;
+            if (!due) return;
+
+            if (due < todayStart) grouped.overdue.push(task);
+            else if (due >= todayStart && due <= todayEnd) grouped.today.push(task);
+            else if (due >= tomorrowStart && due <= tomorrowEnd) grouped.tomorrow.push(task);
+            else grouped.later.push(task);
+
+            const todoCount = Array.isArray(task.todoChecklist) ? task.todoChecklist.length : 0;
+            if (
+                task.status === "Pending" &&
+                (task.priority === "Low" || todoCount <= 3) &&
+                due <= rangeEnd
+            ) {
+                grouped.quickWins.push(task);
+            }
+        });
+
+        grouped.quickWins = grouped.quickWins.slice(0, 6);
+
+        res.status(200).json({
+            success: true,
+            window: windowType,
+            ...grouped,
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Failed to fetch member agenda", error: error.message });
+    }
+};
+
+const createInsightsSuggestions = async (context) => {
+    const fallback = [
+        "Start each day by finishing one overdue or near-due task first.",
+        "Break high-priority tasks into smaller checklist items to increase momentum.",
+        "Post a short status update when blocked to reduce cycle time.",
+    ];
+
+    if (!process.env.GROQ_API_KEY) return fallback;
+    try {
+        const prompt = `
+            You are a productivity coach.
+            Given these metrics: ${JSON.stringify(context)}
+            Return JSON only: { "suggestions": ["...", "...", "..."] }
+            Keep each suggestion practical and under 20 words.
+        `;
+        const completion = await groq.chat.completions.create({
+            messages: [
+                { role: "system", content: "You output valid JSON only." },
+                { role: "user", content: prompt },
+            ],
+            model: AI_MODEL,
+            response_format: { type: "json_object" },
+        });
+        const parsed = JSON.parse(completion.choices?.[0]?.message?.content || "{}");
+        if (Array.isArray(parsed.suggestions) && parsed.suggestions.length > 0) {
+            return parsed.suggestions.map((item) => String(item).trim()).filter(Boolean).slice(0, 3);
+        }
+    } catch (error) {
+        console.error("Insights suggestion generation failed:", error.message);
+    }
+    return fallback;
+};
+
+// @desc    Member personal insights
+// @route   GET /api/tasks/member/insights
+// @access  Private (Member)
+const getMemberInsights = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const rangeParam = req.query.range === "30d" ? "30d" : "7d";
+        const days = rangeParam === "30d" ? 30 : 7;
+        const end = endOfDay(new Date());
+        const start = startOfDay(new Date());
+        start.setDate(start.getDate() - (days - 1));
+
+        const tasks = await Task.find({
+            assignedTo: userId,
+            createdAt: { $lte: end },
+        }).select("title status priority dueDate createdAt updatedAt completedAt progress");
+
+        const dateKeys = [];
+        const trendLookup = {};
+        for (let i = 0; i < days; i += 1) {
+            const current = startOfDay(start);
+            current.setDate(start.getDate() + i);
+            const key = current.toISOString().slice(0, 10);
+            dateKeys.push(key);
+            trendLookup[key] = 0;
+        }
+
+        let completedCount = 0;
+        let onTimeCompleted = 0;
+        let cycleTimeTotalMs = 0;
+        let cycleSamples = 0;
+
+        tasks.forEach((taskDoc) => {
+            const task = taskDoc.toObject();
+            const completionDate = task.completedAt || (task.status === "Completed" ? task.updatedAt : null);
+            if (task.status !== "Completed" || !completionDate) return;
+
+            const completedAt = new Date(completionDate);
+            const key = completedAt.toISOString().slice(0, 10);
+            if (trendLookup[key] !== undefined) {
+                trendLookup[key] += 1;
+            }
+
+            completedCount += 1;
+            if (task.dueDate && completedAt.getTime() <= new Date(task.dueDate).getTime()) {
+                onTimeCompleted += 1;
+            }
+
+            if (task.createdAt) {
+                cycleTimeTotalMs += completedAt.getTime() - new Date(task.createdAt).getTime();
+                cycleSamples += 1;
+            }
+        });
+
+        const completionTrend = dateKeys.map((key) => ({
+            date: key,
+            completed: trendLookup[key] || 0,
+        }));
+        const throughputHeatmap = completionTrend.map((item) => ({
+            date: item.date,
+            value: item.completed,
+        }));
+
+        const onTimeCompletionRatio = completedCount > 0 ? Math.round((onTimeCompleted / completedCount) * 100) : 0;
+        const avgCycleTimeHours = cycleSamples > 0 ? Number((cycleTimeTotalMs / cycleSamples / (1000 * 60 * 60)).toFixed(1)) : 0;
+        const averageDailyThroughput = Number(
+            (completionTrend.reduce((sum, item) => sum + item.completed, 0) / days).toFixed(2)
+        );
+
+        const metrics = {
+            range: rangeParam,
+            totalTasks: tasks.length,
+            completedCount,
+            onTimeCompletionRatio,
+            avgCycleTimeHours,
+            averageDailyThroughput,
+        };
+
+        const suggestions = await createInsightsSuggestions(metrics);
+
+        res.status(200).json({
+            success: true,
+            metrics,
+            completionTrend,
+            throughputHeatmap,
+            suggestions,
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Failed to fetch member insights", error: error.message });
+    }
+};
+
+// @desc    AI assist for a member task
+// @route   POST /api/tasks/:id/ai-assist
+// @access  Private
+const aiAssistTask = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const mode = String(req.body.mode || "").trim();
+        const allowedModes = ["summary", "subtasks", "next_step"];
+        if (!allowedModes.includes(mode)) {
+            return res.status(400).json({ message: "Invalid mode. Use summary, subtasks, or next_step." });
+        }
+
+        const task = await Task.findById(id).select(
+            "title description priority status dueDate progress todoChecklist aiSummary comments"
+        );
+        if (!task) return res.status(404).json({ message: "Task not found" });
+        if (!canUserAccessTask(task, req.user)) {
+            return res.status(403).json({ message: "Not authorized to access this task" });
+        }
+
+        const fallback = fallbackTaskAssist(task, mode);
+        if (!process.env.GROQ_API_KEY) {
+            return res.status(200).json({ mode, content: fallback, source: "fallback" });
+        }
+
+        const prompt = `
+            You are a senior productivity assistant helping an assigned team member.
+            Task JSON: ${JSON.stringify(task)}
+            Mode: ${mode}
+
+            Rules:
+            - Keep response concise and actionable.
+            - Use plain text.
+            - If mode=subtasks, return a numbered list (3-6 steps).
+            - If mode=next_step, provide exactly one next best action.
+        `;
+
+        try {
+            const completion = await groq.chat.completions.create({
+                messages: [
+                    { role: "system", content: "You produce practical productivity guidance." },
+                    { role: "user", content: prompt },
+                ],
+                model: AI_MODEL,
+            });
+            const content = completion.choices?.[0]?.message?.content?.trim() || fallback;
+            return res.status(200).json({
+                mode,
+                content,
+                model: AI_MODEL,
+                source: "ai",
+            });
+        } catch (aiError) {
+            console.error("Task AI assist failed:", aiError.message);
+            return res.status(200).json({
+                mode,
+                content: fallback,
+                source: "fallback",
+            });
+        }
+    } catch (error) {
+        res.status(500).json({ message: "Failed to run AI assist", error: error.message });
+    }
+};
+
+// @desc    AI daily plan for member
+// @route   POST /api/tasks/member/plan-day
+// @access  Private (Member)
+const planMemberDay = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const now = new Date();
+        const weekEnd = endOfDay(now);
+        weekEnd.setDate(weekEnd.getDate() + 7);
+
+        const tasks = await Task.find({
+            assignedTo: userId,
+            status: { $ne: "Completed" },
+            dueDate: { $exists: true, $ne: null, $lte: weekEnd },
+        })
+            .sort({ dueDate: 1, priority: -1, progress: 1 })
+            .limit(25)
+            .select("title dueDate priority status progress aiSummary");
+
+        if (tasks.length === 0) {
+            return res.status(200).json({
+                success: true,
+                plan: [],
+                summary: "No upcoming tasks found for this week.",
+                source: "fallback",
+            });
+        }
+
+        const fallbackPlan = tasks.slice(0, 6).map((task, index) => ({
+            rank: index + 1,
+            taskId: task._id,
+            title: task.title,
+            reason: `Due ${new Date(task.dueDate).toLocaleDateString()} with ${task.priority} priority.`,
+        }));
+
+        if (!process.env.GROQ_API_KEY) {
+            return res.status(200).json({
+                success: true,
+                plan: fallbackPlan,
+                summary: "Prioritized by due date, priority, and current progress.",
+                source: "fallback",
+            });
+        }
+
+        const prompt = `
+            Build a focused workday plan for this member.
+            Tasks: ${JSON.stringify(tasks)}
+            Return JSON only:
+            {
+              "summary": "short guidance",
+              "plan": [
+                { "title": "...", "reason": "..." }
+              ]
+            }
+            Include max 6 plan items in priority order.
+        `;
+
+        try {
+            const completion = await groq.chat.completions.create({
+                messages: [
+                    { role: "system", content: "You output valid JSON only." },
+                    { role: "user", content: prompt },
+                ],
+                model: AI_MODEL,
+                response_format: { type: "json_object" },
+            });
+            const parsed = JSON.parse(completion.choices?.[0]?.message?.content || "{}");
+            const parsedPlan = Array.isArray(parsed.plan) ? parsed.plan : [];
+            const normalizedPlan = parsedPlan
+                .map((item, index) => {
+                    const title = String(item?.title || "").trim();
+                    if (!title) return null;
+                    const match = tasks.find((task) => task.title === title) || tasks[index];
+                    return {
+                        rank: index + 1,
+                        taskId: match?._id || null,
+                        title,
+                        reason: String(item?.reason || "Prioritized for momentum and deadlines.").trim(),
+                    };
+                })
+                .filter(Boolean)
+                .slice(0, 6);
+
+            return res.status(200).json({
+                success: true,
+                plan: normalizedPlan.length > 0 ? normalizedPlan : fallbackPlan,
+                summary:
+                    String(parsed.summary || "").trim() ||
+                    "Prioritized by urgency, priority, and low progress risk.",
+                source: "ai",
+            });
+        } catch (aiError) {
+            console.error("Plan day AI failed:", aiError.message);
+            return res.status(200).json({
+                success: true,
+                plan: fallbackPlan,
+                summary: "Prioritized by due date, priority, and current progress.",
+                source: "fallback",
+            });
+        }
+    } catch (error) {
+        res.status(500).json({ message: "Failed to generate day plan", error: error.message });
+    }
+};
+
 module.exports = {
     getTasks, getTaskById, createTask, updateTask, deleteTask,
-    updateTaskStatus, updateTaskChecklist, getDashboardData, getUserDashboardData,
-    createTaskFromAI, generateSubtasks, getAllTasksGlobal
+    updateTaskStatus, updateTaskChecklist, addTaskComment, getTaskComments,
+    getDashboardData, getUserDashboardData,
+    createTaskFromAI, generateSubtasks, getAllTasksGlobal,
+    getMemberAgenda, getMemberInsights, aiAssistTask, planMemberDay
 };
+

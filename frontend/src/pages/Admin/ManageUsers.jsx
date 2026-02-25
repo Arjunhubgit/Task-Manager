@@ -118,11 +118,13 @@ const ManageUsers = () => {
     socket.on('userStatusChanged', (data) => {
       // data: { userId, status, timestamp }
       setUsers((prevUsers) => {
+        const isOnline = ['online', 'idle', 'dnd'].includes(data.status);
         return prevUsers.map((user) => {
           if (user._id === data.userId) {
             return {
               ...user,
-              status: data.status
+              status: data.status,
+              isOnline
             };
           }
           return user;

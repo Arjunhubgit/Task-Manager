@@ -102,11 +102,9 @@ const   SearchBar = () => {
     const handleTaskClick = (taskId) => {
         // Route based on user role
         const isAdminOrHost = user?.role === 'admin' || user?.role === 'host';
-        const route = isAdminOrHost 
-            ? `/admin/tasks?highlight=${taskId}`
-            : `/user/tasks?highlight=${taskId}`;
+        const route = isAdminOrHost ? `/admin/tasks?highlight=${taskId}` : `/user/tasks`;
         
-        navigate(route, { state: { highlightTaskId: taskId } });
+        navigate(route, { state: isAdminOrHost ? { highlightTaskId: taskId } : { targetTaskId: taskId } });
         setIsOpen(false);
         setSearchTerm('');
         setSearchResults({ tasks: [], users: [] });

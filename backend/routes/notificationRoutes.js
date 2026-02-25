@@ -6,6 +6,7 @@ const {
   deleteNotification,
   getUnreadCount,
   deleteAllNotifications,
+  generateNotificationDigest,
 } = require("../controllers/notificationControllers");
 const { protect } = require("../middlewares/authMiddleware");
 
@@ -31,5 +32,8 @@ router.delete("/:notificationId", deleteNotification);
 
 // Delete all notifications for a user
 router.delete("/user/:userId/delete-all", deleteAllNotifications);
+
+// AI digest for unread notifications
+router.post("/user/:userId/ai-digest", generateNotificationDigest);
 
 module.exports = router;

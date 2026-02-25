@@ -5,6 +5,23 @@ const todoSchema = new mongoose.Schema({
   completed: { type: Boolean, default: false },
 });
 
+const commentSchema = new mongoose.Schema(
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    text: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 2000,
+    },
+  },
+  { timestamps: true }
+);
+
 const taskSchema = new mongoose.Schema(
   {
     title: { type: String, required: true },
@@ -16,7 +33,10 @@ const taskSchema = new mongoose.Schema(
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     attachments: [{ type: String }],
     todoChecklist: [todoSchema],
+    comments: [commentSchema],
+    tags: [{ type: String, trim: true }],
     progress: { type: Number, default: 0 },
+    completedAt: { type: Date, default: null },
     // --- AI INTEGRATION FIELD ---
     aiSummary: { 
       type: String, 

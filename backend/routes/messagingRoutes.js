@@ -8,9 +8,14 @@ router.get('/conversations/:userId', protect, messagingControllers.getConversati
 
 // Get messages for a conversation
 router.get('/conversation/:conversationId', protect, messagingControllers.getConversationMessages);
+router.get('/conversation/:conversationId/preferences', protect, messagingControllers.getConversationPreferences);
+router.put('/conversation/:conversationId/preferences', protect, messagingControllers.updateConversationPreferences);
 
 // Send a message
 router.post('/send', protect, messagingControllers.sendMessage);
+router.post('/zoom-meeting', protect, messagingControllers.createZoomMeeting);
+router.post('/:conversationId/ai-summary', protect, messagingControllers.getConversationAiSummary);
+router.post('/:conversationId/ai-reply-suggestions', protect, messagingControllers.getAiReplySuggestions);
 
 // Mark a message as read
 router.put('/:messageId/read', protect, messagingControllers.markMessageAsRead);
@@ -25,9 +30,9 @@ router.delete('/:messageId', protect, messagingControllers.deleteMessage);
 router.delete('/conversation/:conversationId', protect, messagingControllers.deleteConversation);
 
 // Clear chat history for a conversation
-router.delete('/clear/:conversationId', messagingControllers.clearChat);
+router.delete('/clear/:conversationId', protect, messagingControllers.clearChat);
 
 // unread count
-router.put('/read/:conversationId', messagingControllers.markConversationAsRead);
+router.put('/read/:conversationId', protect, messagingControllers.markConversationAsRead);
 
 module.exports = router;

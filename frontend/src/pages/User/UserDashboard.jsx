@@ -5,7 +5,16 @@ import { useNavigate } from "react-router-dom";
 import { useUserAuth } from "../../hooks/useUserAuth";
 import axiosInstance from "../../utils/axiosInstance";
 import { API_PATHS } from "../../utils/apiPaths";
-import { LuArrowRight, LuCircleAlert, LuClock, LuCircleCheckBig, LuActivity } from "react-icons/lu";
+import {
+  LuArrowRight,
+  LuCircleAlert,
+  LuClock,
+  LuCircleCheckBig,
+  LuActivity,
+  LuPlay,
+  LuBrain,
+  LuTriangleAlert
+} from "react-icons/lu";
 import TaskListTable from "../../components/TaskListTable";
 import CustomPieChart from "../../components/charts/CustomPieChart";
 import CustomBarChart from "../../components/charts/CustomBarChart";
@@ -32,6 +41,7 @@ const itemVariants = {
     transition: { type: "spring", stiffness: 50, damping: 15 }
   },
 };
+const _FRAMER_MOTION_LOADED = Boolean(motion);
 
 const CHART_COLORS = ['#06b6d4', '#f97316', '#f43f5e', '#8b5cf6'];
 
@@ -47,7 +57,13 @@ const UserDashboard = () => {
   // --- Data Logic ---
   const chartData = useMemo(() => {
     const charts = dashboardData?.charts;
-    if (!charts) return { pieChartData: [], barChartData: [] };
+    if (!charts) {
+      return {
+        pieChartData: [],
+        barChartData: [],
+        statsForHeader: { total: 0, pending: 0, inProgress: 0, completed: 0 },
+      };
+    }
 
     const taskDistribution = charts.taskDistribution || {};
     const taskPriorityLevels = charts.taskPriorityLevels || {};
@@ -73,6 +89,19 @@ const UserDashboard = () => {
 
     return { pieChartData: pieData, barChartData: barData, statsForHeader };
   }, [dashboardData]);
+
+  const todaySnapshot = useMemo(() => {
+    const fallback = {
+      dueToday: 0,
+      overdue: dashboardData?.statistics?.overdueTasks || 0,
+      inProgress: chartData.statsForHeader.inProgress || 0,
+      completionRate:
+        chartData.statsForHeader.total > 0
+          ? Math.round((chartData.statsForHeader.completed / chartData.statsForHeader.total) * 100)
+          : 0,
+    };
+    return dashboardData?.todaySnapshot || fallback;
+  }, [dashboardData, chartData.statsForHeader]);
 
   const onSeeMore = () => navigate("/user/tasks");
 
@@ -115,6 +144,16 @@ const UserDashboard = () => {
     );
   }
 
+  if (error) {
+    return (
+      <DashboardLayout activeMenu="Dashboard">
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-6 text-red-200">
+          {error}
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   // --- Render ---
   return (
     <DashboardLayout activeMenu="Dashboard">
@@ -130,7 +169,106 @@ const UserDashboard = () => {
           <DashboardStats user={user} stats={chartData.statsForHeader} />
         </motion.div>
 
-        {/* 2. Critical Action Center (Urgency) */}
+        {/* 2. Today Snapshot + AI Focus */}
+        <motion.div variants={itemVariants} className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div className="xl:col-span-2 rounded-3xl border border-white/10 bg-[#121212]/80 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-lg font-semibold text-white">Today Snapshot</h4>
+              <span className="text-xs text-gray-400">Decide your next action in seconds</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <p className="text-xs text-gray-400">Due Today</p>
+                <p className="text-xl font-bold text-orange-300 mt-1">{todaySnapshot.dueToday || 0}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <p className="text-xs text-gray-400">Overdue</p>
+                <p className="text-xl font-bold text-red-300 mt-1">{todaySnapshot.overdue || 0}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <p className="text-xs text-gray-400">In Progress</p>
+                <p className="text-xl font-bold text-cyan-300 mt-1">{todaySnapshot.inProgress || 0}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <p className="text-xs text-gray-400">Completion Rate</p>
+                <p className="text-xl font-bold text-emerald-300 mt-1">{todaySnapshot.completionRate || 0}%</p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-cyan-500/40 bg-cyan-500/10 text-cyan-200 text-sm"
+                onClick={() => navigate("/user/my-day")}
+              >
+                <LuPlay /> Start Focus
+              </button>
+              <button
+                className="px-3 py-2 rounded-lg border border-white/10 text-gray-300 text-sm hover:bg-white/5"
+                onClick={() => navigate("/user/my-day")}
+              >
+                Open My Day
+              </button>
+              <button
+                className="px-3 py-2 rounded-lg border border-white/10 text-gray-300 text-sm hover:bg-white/5"
+                onClick={() => {
+                  const target = dashboardData?.nextBestTask?._id || dashboardData?.upcomingTasks?.[0]?._id;
+                  if (target) handleTaskClick(target);
+                }}
+              >
+                Resume Last Task
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-indigo-500/10 p-5">
+            <h4 className="text-white font-semibold flex items-center gap-2">
+              <LuBrain className="text-cyan-300" />
+              Next Best Task
+            </h4>
+            {dashboardData?.nextBestTask ? (
+              <div className="mt-3">
+                <button
+                  className="text-left w-full rounded-xl border border-white/10 bg-black/20 p-3 hover:bg-black/30"
+                  onClick={() => handleTaskClick(dashboardData.nextBestTask._id)}
+                >
+                  <p className="font-semibold text-white">{dashboardData.nextBestTask.title}</p>
+                  <p className="text-xs text-gray-300 mt-1">
+                    AI reason: {dashboardData.nextBestTask.aiSummary || "Urgent due date and high impact priority."}
+                  </p>
+                </button>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-gray-400">No active task recommendation yet.</p>
+            )}
+          </div>
+        </motion.div>
+
+        {/* 3. Risk Radar */}
+        <motion.div variants={itemVariants} className="rounded-3xl border border-amber-500/25 bg-amber-500/5 p-5">
+          <h4 className="text-white font-semibold flex items-center gap-2">
+            <LuTriangleAlert className="text-amber-400" />
+            Risk Radar
+          </h4>
+          {dashboardData?.riskRadar?.length > 0 ? (
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+              {dashboardData.riskRadar.map((task) => (
+                <button
+                  key={task._id}
+                  onClick={() => handleTaskClick(task._id)}
+                  className="text-left rounded-xl border border-amber-500/20 bg-black/20 p-3 hover:bg-black/30"
+                >
+                  <p className="font-semibold text-white">{task.title}</p>
+                  <p className="text-xs text-amber-100/90 mt-1">
+                    Due {new Date(task.dueDate).toLocaleDateString()} | {task.priority} | Progress {task.progress || 0}%
+                  </p>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-gray-400">No immediate risk tasks detected.</p>
+          )}
+        </motion.div>
+
+        {/* 4. Critical Action Center (Urgency) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
           {/* Overdue Section */}
@@ -198,7 +336,7 @@ const UserDashboard = () => {
 
             <div className="space-y-3 relative z-10">
               {dashboardData?.upcomingTasks?.length > 0 ? (
-                dashboardData.upcomingTasks.map((task, i) => (
+                dashboardData.upcomingTasks.map((task) => (
                   <motion.div 
                     key={task._id}
                     whileHover={{ scale: 1.02, x: 4 }}

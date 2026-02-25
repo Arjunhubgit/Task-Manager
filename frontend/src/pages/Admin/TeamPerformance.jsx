@@ -1,85 +1,70 @@
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import DashboardLayout from "../../components/layouts/DashboardLayout";
-import { UserContext } from "../../context/userContext";
 import axiosInstance from "../../utils/axiosInstance";
 import { API_PATHS } from "../../utils/apiPaths";
 import { LuTrendingUp, LuUser, LuCircleCheckBig, LuAward } from "react-icons/lu";
 
+const ZERO_STATS = {
+  total: 0,
+  completed: 0,
+  inProgress: 0,
+  pending: 0,
+  high: 0,
+  completionRate: 0,
+  efficiency: 0,
+};
+
+const normalizeId = (value) => {
+  if (!value) return null;
+  if (typeof value === "string") return value;
+  if (typeof value === "object") {
+    if (value._id) return String(value._id);
+    if (value.id) return String(value.id);
+  }
+  return String(value);
+};
+
+const getAssignedUserIds = (assignedTo) => {
+  if (!Array.isArray(assignedTo)) return [];
+  return assignedTo.map((entry) => normalizeId(entry)).filter(Boolean);
+};
+
+const extractUsers = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.users)) return payload.users;
+  return [];
+};
+
+const extractTasks = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.tasks)) return payload.tasks;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+};
+
 const TeamPerformance = () => {
-  const { user } = useContext(UserContext);
   const [teamMembers, setTeamMembers] = useState([]);
   const [memberStats, setMemberStats] = useState({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [sortBy, setSortBy] = useState("completion");
+  const [sortDirection, setSortDirection] = useState("desc");
 
-  // Fetch team members and their stats
-  const fetchTeamPerformance = async () => {
-    try {
-      setLoading(true);
-      
-      // Fetch all users and tasks in parallel
-      const [usersResponse, tasksResponse] = await Promise.all([
-        axiosInstance.get(API_PATHS.USERS.GET_ALL_USERS),
-        axiosInstance.get(API_PATHS.TASKS.GET_ALL_TASKS),
-      ]);
-      
-      // Handle different response structures
-      const users = Array.isArray(usersResponse.data) 
-        ? usersResponse.data 
-        : usersResponse.data?.data || [];
-      
-      let allTasks = [];
-      if (Array.isArray(tasksResponse.data)) {
-        allTasks = tasksResponse.data;
-      } else if (tasksResponse.data?.data && Array.isArray(tasksResponse.data.data)) {
-        allTasks = tasksResponse.data.data;
-      } else if (tasksResponse.data?.success && Array.isArray(tasksResponse.data.tasks)) {
-        allTasks = tasksResponse.data.tasks;
-      }
-      
-      if (users.length > 0) {
-        setTeamMembers(users);
-        
-        // Calculate stats for each member
-        const stats = {};
-        for (const member of users) {
-          stats[member._id] = calculateMemberStats(allTasks, member._id);
-        }
-        setMemberStats(stats);
-      }
-    } catch (error) {
-      console.error("Error fetching team performance:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const calculateMemberStats = useCallback((tasks, memberId) => {
+    if (!Array.isArray(tasks) || !memberId) return ZERO_STATS;
 
-  // Calculate stats for each member
-  const calculateMemberStats = (tasks, memberId) => {
-    // Ensure tasks is an array
-    if (!Array.isArray(tasks)) {
-      return {
-        total: 0,
-        completed: 0,
-        inProgress: 0,
-        pending: 0,
-        high: 0,
-        completionRate: 0,
-        efficiency: 0,
-      };
-    }
+    const memberIdStr = String(memberId);
+    const memberTasks = tasks.filter((task) => getAssignedUserIds(task.assignedTo).includes(memberIdStr));
 
-    const memberTasks = tasks.filter((task) =>
-      task.assignedTo?.includes(memberId) || task.createdBy === memberId
-    );
-
-    const completed = memberTasks.filter((t) => t.status === "Completed").length;
-    const inProgress = memberTasks.filter((t) => t.status === "In Progress").length;
-    const pending = memberTasks.filter((t) => t.status === "Pending").length;
-    const high = memberTasks.filter((t) => t.priority === "High").length;
+    const completed = memberTasks.filter((task) => task.status === "Completed").length;
+    const inProgress = memberTasks.filter((task) => task.status === "In Progress").length;
+    const pending = memberTasks.filter((task) => task.status === "Pending").length;
+    const high = memberTasks.filter((task) => task.priority === "High").length;
 
     const total = memberTasks.length;
-    const completionRate = total > 0 ? ((completed / total) * 100).toFixed(1) : 0;
+    const completionRate = total > 0 ? (completed / total) * 100 : 0;
+    const efficiency = total > 0 ? ((completed + inProgress * 0.5) / total) * 100 : 0;
 
     return {
       total,
@@ -88,34 +73,127 @@ const TeamPerformance = () => {
       pending,
       high,
       completionRate,
-      efficiency: (completed + inProgress) / Math.max(total, 1),
+      efficiency,
     };
-  };
+  }, []);
+
+  const fetchTeamPerformance = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const [usersResponse, tasksResponse] = await Promise.all([
+        axiosInstance.get(API_PATHS.USERS.GET_ALL_USERS),
+        axiosInstance.get(API_PATHS.TASKS.GET_ALL_TASKS),
+      ]);
+
+      const users = extractUsers(usersResponse.data);
+      const allTasks = extractTasks(tasksResponse.data);
+
+      setTeamMembers(users);
+
+      const stats = users.reduce((acc, member) => {
+        acc[member._id] = calculateMemberStats(allTasks, member._id);
+        return acc;
+      }, {});
+
+      setMemberStats(stats);
+    } catch (fetchError) {
+      console.error("Error fetching team performance:", fetchError);
+      setError("Unable to fetch team performance data right now.");
+    } finally {
+      setLoading(false);
+    }
+  }, [calculateMemberStats]);
 
   useEffect(() => {
     fetchTeamPerformance();
-  }, []);
+  }, [fetchTeamPerformance]);
 
-  // Sort team members based on selected criterion
-  const getSortedMembers = () => {
-    const membersWithStats = teamMembers.map((member) => ({
-      ...member,
-      stats: memberStats[member._id] || { total: 0, completed: 0, completionRate: 0, efficiency: 0 },
-    }));
+  const membersWithStats = useMemo(
+    () =>
+      teamMembers.map((member) => ({
+        ...member,
+        stats: memberStats[member._id] || ZERO_STATS,
+      })),
+    [teamMembers, memberStats]
+  );
 
-    switch (sortBy) {
-      case "completion":
-        return membersWithStats.sort((a, b) => b.stats.completionRate - a.stats.completionRate);
-      case "tasks":
-        return membersWithStats.sort((a, b) => b.stats.total - a.stats.total);
-      case "efficiency":
-        return membersWithStats.sort((a, b) => b.stats.efficiency - a.stats.efficiency);
-      case "name":
-        return membersWithStats.sort((a, b) => a.name.localeCompare(b.name));
-      default:
-        return membersWithStats;
+  const sortedMembers = useMemo(() => {
+    const direction = sortDirection === "asc" ? 1 : -1;
+    const members = [...membersWithStats];
+
+    members.sort((a, b) => {
+      let comparison = 0;
+
+      if (sortBy === "name") {
+        comparison = a.name.localeCompare(b.name);
+      } else if (sortBy === "tasks") {
+        comparison = a.stats.total - b.stats.total;
+      } else if (sortBy === "efficiency") {
+        comparison = a.stats.efficiency - b.stats.efficiency;
+      } else {
+        comparison = a.stats.completionRate - b.stats.completionRate;
+      }
+
+      if (comparison === 0) {
+        return a.name.localeCompare(b.name);
+      }
+
+      return comparison * direction;
+    });
+
+    return members;
+  }, [membersWithStats, sortBy, sortDirection]);
+
+  const topPerformer = useMemo(() => {
+    if (membersWithStats.length === 0) return null;
+
+    return [...membersWithStats].sort((a, b) => {
+      if (b.stats.completionRate !== a.stats.completionRate) {
+        return b.stats.completionRate - a.stats.completionRate;
+      }
+      if (b.stats.completed !== a.stats.completed) {
+        return b.stats.completed - a.stats.completed;
+      }
+      if (b.stats.total !== a.stats.total) {
+        return b.stats.total - a.stats.total;
+      }
+      return a.name.localeCompare(b.name);
+    })[0];
+  }, [membersWithStats]);
+
+  const teamAverages = useMemo(() => {
+    if (membersWithStats.length === 0) {
+      return { completionRate: "0.0", avgTasks: "0.0" };
     }
+
+    const completionRate =
+      membersWithStats.reduce((sum, member) => sum + member.stats.completionRate, 0) /
+      membersWithStats.length;
+
+    const avgTasks =
+      membersWithStats.reduce((sum, member) => sum + member.stats.total, 0) /
+      membersWithStats.length;
+
+    return {
+      completionRate: completionRate.toFixed(1),
+      avgTasks: avgTasks.toFixed(1),
+    };
+  }, [membersWithStats]);
+
+  const handleSort = (key) => {
+    if (sortBy === key) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setSortBy(key);
+    setSortDirection(key === "name" ? "asc" : "desc");
   };
+
+  const getSortLabel = (key, label) =>
+    sortBy === key ? `${label} ${sortDirection === "asc" ? "ASC" : "DESC"}` : label;
 
   if (loading) {
     return (
@@ -127,26 +205,6 @@ const TeamPerformance = () => {
     );
   }
 
-  const sortedMembers = getSortedMembers();
-
-  // Get top performer
-  const topPerformer = sortedMembers[0];
-
-  // Calculate team averages
-  const teamAverages = {
-    completionRate:
-      sortedMembers.length > 0
-        ? (
-            sortedMembers.reduce((sum, m) => sum + parseFloat(m.stats.completionRate), 0) /
-            sortedMembers.length
-          ).toFixed(1)
-        : 0,
-    avgTasks:
-      sortedMembers.length > 0
-        ? (sortedMembers.reduce((sum, m) => sum + m.stats.total, 0) / sortedMembers.length).toFixed(1)
-        : 0,
-  };
-
   return (
     <DashboardLayout activeMenu="Team Performance">
       <div className="space-y-6 p-6">
@@ -155,6 +213,12 @@ const TeamPerformance = () => {
           <h1 className="text-4xl font-bold text-gray-100">Team Performance</h1>
           <p className="text-gray-400 mt-2">Monitor individual and team productivity metrics</p>
         </div>
+
+        {error && (
+          <div className="bg-rose-500/10 border border-rose-500/25 text-rose-300 rounded-lg px-4 py-3 text-sm">
+            {error}
+          </div>
+        )}
 
         {/* Performance Summary */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -196,18 +260,25 @@ const TeamPerformance = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <img
-                  src={topPerformer.profileImageUrl || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"}
+                  src={
+                    topPerformer.profileImageUrl ||
+                    "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"
+                  }
                   alt={topPerformer.name}
                   className="w-16 h-16 rounded-full object-cover border-2 border-amber-400/50"
                 />
                 <div>
                   <h3 className="text-xl font-bold text-amber-300">{topPerformer.name}</h3>
                   <p className="text-sm text-gray-400">{topPerformer.email}</p>
-                  <p className="text-xs text-gray-500 mt-1">{topPerformer.stats.completed} tasks completed</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {topPerformer.stats.completed} tasks completed
+                  </p>
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-3xl font-bold text-amber-300">{topPerformer.stats.completionRate}%</div>
+                <div className="text-3xl font-bold text-amber-300">
+                  {topPerformer.stats.completionRate.toFixed(1)}%
+                </div>
                 <p className="text-sm text-gray-400">Completion Rate</p>
               </div>
             </div>
@@ -215,46 +286,46 @@ const TeamPerformance = () => {
         )}
 
         {/* Sort Controls */}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => setSortBy("completion")}
+            onClick={() => handleSort("completion")}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
               sortBy === "completion"
                 ? "bg-[#EA8D23]/20 text-[#EA8D23] border border-[#EA8D23]/50"
                 : "bg-white/5 text-gray-400 border border-white/10 hover:border-white/20"
             }`}
           >
-            Completion Rate
+            {getSortLabel("completion", "Completion Rate")}
           </button>
           <button
-            onClick={() => setSortBy("tasks")}
+            onClick={() => handleSort("tasks")}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
               sortBy === "tasks"
                 ? "bg-[#EA8D23]/20 text-[#EA8D23] border border-[#EA8D23]/50"
                 : "bg-white/5 text-gray-400 border border-white/10 hover:border-white/20"
             }`}
           >
-            Total Tasks
+            {getSortLabel("tasks", "Total Tasks")}
           </button>
           <button
-            onClick={() => setSortBy("efficiency")}
+            onClick={() => handleSort("efficiency")}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
               sortBy === "efficiency"
                 ? "bg-[#EA8D23]/20 text-[#EA8D23] border border-[#EA8D23]/50"
                 : "bg-white/5 text-gray-400 border border-white/10 hover:border-white/20"
             }`}
           >
-            Efficiency
+            {getSortLabel("efficiency", "Efficiency")}
           </button>
           <button
-            onClick={() => setSortBy("name")}
+            onClick={() => handleSort("name")}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
               sortBy === "name"
                 ? "bg-[#EA8D23]/20 text-[#EA8D23] border border-[#EA8D23]/50"
                 : "bg-white/5 text-gray-400 border border-white/10 hover:border-white/20"
             }`}
           >
-            Name (A-Z)
+            {getSortLabel("name", "Name (A-Z)")}
           </button>
         </div>
 
@@ -274,9 +345,9 @@ const TeamPerformance = () => {
                 </tr>
               </thead>
               <tbody>
-                {sortedMembers.map((member, idx) => {
+                {sortedMembers.map((member) => {
                   const stats = member.stats;
-                  const completionRate = parseFloat(stats.completionRate);
+                  const completionRate = Number(stats.completionRate || 0);
                   let statusColor = "text-gray-400";
                   let statusText = "Neutral";
 
@@ -299,7 +370,10 @@ const TeamPerformance = () => {
                       <td className="py-4 px-4">
                         <div className="flex items-center gap-3">
                           <img
-                            src={member.profileImageUrl || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"}
+                            src={
+                              member.profileImageUrl ||
+                              "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"
+                            }
                             alt={member.name}
                             className="w-8 h-8 rounded-full object-cover"
                           />
@@ -326,10 +400,10 @@ const TeamPerformance = () => {
                           <div className="w-24 h-2 bg-white/10 rounded-full overflow-hidden">
                             <div
                               className="h-full bg-gradient-to-r from-[#EA8D23] to-orange-400 transition-all duration-500"
-                              style={{ width: `${completionRate}%` }}
+                              style={{ width: `${Math.min(completionRate, 100)}%` }}
                             ></div>
                           </div>
-                          <span className="font-bold text-gray-200 min-w-[3rem]">{completionRate}%</span>
+                          <span className="font-bold text-gray-200 min-w-[3rem]">{completionRate.toFixed(1)}%</span>
                         </div>
                       </td>
                       <td className="text-center py-4 px-4">
@@ -356,18 +430,21 @@ const TeamPerformance = () => {
             <h2 className="text-lg font-bold text-gray-100 mb-4">High Performers</h2>
             <div className="space-y-3">
               {sortedMembers
-                .filter((m) => parseFloat(m.stats.completionRate) >= 80)
+                .filter((member) => member.stats.completionRate >= 80)
                 .slice(0, 5)
                 .map((member) => (
-                  <div key={member._id} className="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                  <div
+                    key={member._id}
+                    className="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/20 rounded-lg"
+                  >
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 bg-green-400 rounded-full"></div>
                       <span className="text-gray-300">{member.name}</span>
                     </div>
-                    <span className="text-green-400 font-bold">{member.stats.completionRate}%</span>
+                    <span className="text-green-400 font-bold">{member.stats.completionRate.toFixed(1)}%</span>
                   </div>
                 ))}
-              {sortedMembers.filter((m) => parseFloat(m.stats.completionRate) >= 80).length === 0 && (
+              {sortedMembers.filter((member) => member.stats.completionRate >= 80).length === 0 && (
                 <p className="text-gray-500 text-sm">No high performers yet</p>
               )}
             </div>
@@ -377,18 +454,21 @@ const TeamPerformance = () => {
             <h2 className="text-lg font-bold text-gray-100 mb-4">Needs Support</h2>
             <div className="space-y-3">
               {sortedMembers
-                .filter((m) => parseFloat(m.stats.completionRate) < 50)
+                .filter((member) => member.stats.completionRate < 50)
                 .slice(0, 5)
                 .map((member) => (
-                  <div key={member._id} className="flex items-center justify-between p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                  <div
+                    key={member._id}
+                    className="flex items-center justify-between p-3 bg-red-500/10 border border-red-500/20 rounded-lg"
+                  >
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 bg-red-400 rounded-full"></div>
                       <span className="text-gray-300">{member.name}</span>
                     </div>
-                    <span className="text-red-400 font-bold">{member.stats.completionRate}%</span>
+                    <span className="text-red-400 font-bold">{member.stats.completionRate.toFixed(1)}%</span>
                   </div>
                 ))}
-              {sortedMembers.filter((m) => parseFloat(m.stats.completionRate) < 50).length === 0 && (
+              {sortedMembers.filter((member) => member.stats.completionRate < 50).length === 0 && (
                 <p className="text-gray-500 text-sm">All team members are performing well</p>
               )}
             </div>

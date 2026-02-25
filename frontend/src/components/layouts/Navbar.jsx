@@ -13,7 +13,7 @@ import { getImageUrl } from '../../utils/helper';
 import socket from '../../services/socket';
 
 
-const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
+const Navbar = ({ onMenuToggle, isMobileMenuOpen }) => {
     const { user, clearUser, updateUserStatus } = useContext(UserContext); // Get user data and logout function
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [userStatus, setUserStatus] = useState(null); // Will be set from user.status
@@ -46,14 +46,12 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
         try {
             setIsLoadingMessages(true);
             setMessageError(null);
-            // Using notifications endpoint as a placeholder for messages
-            // You can replace this with actual messages endpoint when available
             const response = await axiosInstance.get(
-                API_PATHS.NOTIFICATIONS.GET_UNREAD_COUNT(user._id)
+                API_PATHS.MESSAGES.GET_UNREAD_MESSAGES(user._id)
             );
 
-            if (response.data && response.data.success) {
-                setUnreadMessagesCount(response.data.data?.unreadCount || 0);
+            if (response.data) {
+                setUnreadMessagesCount(response.data.unreadCount || 0);
             }
         } catch (error) {
             console.error('Failed to fetch unread messages:', error);
@@ -77,6 +75,14 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
 
         return () => clearInterval(messageInterval);
     }, [user, fetchUnreadMessagesCount]);
+
+    useEffect(() => {
+        const handleUnreadUpdate = () => {
+            fetchUnreadMessagesCount();
+        };
+        window.addEventListener("messages:unread-updated", handleUnreadUpdate);
+        return () => window.removeEventListener("messages:unread-updated", handleUnreadUpdate);
+    }, [fetchUnreadMessagesCount]);
 
     // Handle email/messages button click
     const handleEmailClick = useCallback(async () => {
@@ -113,7 +119,7 @@ const Navbar = ({ activeMenu, onMenuToggle, isMobileMenuOpen }) => {
     }, []);
 
     // Determine online status: user must be logged in AND status must be 'online'
-    const isOnline = !!user && userStatus === 'online';
+    const _isOnline = !!user && userStatus === 'online';
 
     return (
         <nav className="flex items-center justify-between px-4 sm:px-6 py-4 h-16 bg-[#050505]/80 backdrop-blur-xl border-b border-white/10 sticky top-0 z-[100] transition-all duration-300">

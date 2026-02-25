@@ -6,6 +6,28 @@ import { API_PATHS } from '../utils/apiPaths';
  * Handles all message and conversation related API calls
  */
 
+// Helper function to transform conversation data
+const transformConversation = (conversation, currentUserId) => {
+    if (!conversation || !conversation.participants) {
+        return conversation;
+    }
+
+    // Find the other participant (not the current user)
+    const otherParticipant = conversation.participants.find(
+        p => p._id?.toString() !== currentUserId?.toString()
+    );
+
+    // Map participant data to expected field names
+    return {
+        ...conversation,
+        participantId: otherParticipant?._id || conversation.participantId,
+        participantName: otherParticipant?.name || 'Unknown',
+        participantEmail: otherParticipant?.email || '',
+        participantImage: otherParticipant?.profileImageUrl || '',
+        participantStatus: otherParticipant?.status || 'offline'
+    };
+};
+
 class MessagingService {
     /**
      * Get all conversations for a user
@@ -15,7 +37,10 @@ class MessagingService {
     static async getConversations(userId) {
         try {
             const response = await axiosInstance.get(API_PATHS.MESSAGES.GET_CONVERSATIONS(userId));
-            return response.data || [];
+            const conversations = response.data || [];
+            
+            // Transform each conversation to extract participant details
+            return conversations.map(conv => transformConversation(conv, userId));
         } catch (error) {
             console.error('Failed to fetch conversations:', error);
             throw error;
@@ -110,9 +135,8 @@ class MessagingService {
      */
     static async markConversationAsRead(conversationId) {
         try {
-            // Batch operation - mark all messages in conversation as read
             const response = await axiosInstance.put(
-                `/api/messages/conversation/${conversationId}/read-all`
+                API_PATHS.MESSAGES.MARK_CONVERSATION_AS_READ(conversationId)
             );
             return response.data;
         } catch (error) {
@@ -232,6 +256,54 @@ class MessagingService {
         return () => {
             console.log(`Unsubscribing from messages for conversation: ${conversationId}`);
         };
+    }
+
+    static async getConversationPreferences(conversationId) {
+        try {
+            const response = await axiosInstance.get(
+                API_PATHS.MESSAGES.GET_CONVERSATION_PREFERENCES(conversationId)
+            );
+            return response.data;
+        } catch (error) {
+            console.error("Failed to fetch conversation preferences:", error);
+            throw error;
+        }
+    }
+
+    static async updateConversationPreferences(conversationId, payload = {}) {
+        try {
+            const response = await axiosInstance.put(
+                API_PATHS.MESSAGES.UPDATE_CONVERSATION_PREFERENCES(conversationId),
+                payload
+            );
+            return response.data;
+        } catch (error) {
+            console.error("Failed to update conversation preferences:", error);
+            throw error;
+        }
+    }
+
+    static async summarizeConversation(conversationId) {
+        try {
+            const response = await axiosInstance.post(API_PATHS.MESSAGES.AI_SUMMARY(conversationId), {});
+            return response.data;
+        } catch (error) {
+            console.error("Failed to summarize conversation:", error);
+            throw error;
+        }
+    }
+
+    static async getReplySuggestions(conversationId, tone = "neutral") {
+        try {
+            const response = await axiosInstance.post(
+                API_PATHS.MESSAGES.AI_REPLY_SUGGESTIONS(conversationId),
+                { tone }
+            );
+            return response.data;
+        } catch (error) {
+            console.error("Failed to generate reply suggestions:", error);
+            throw error;
+        }
     }
 }
 

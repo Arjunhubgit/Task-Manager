@@ -68,9 +68,19 @@ const getStatusLabel = (status) => {
     }
 };
 
+const URL_PATTERN = /(https?:\/\/[^\s]+)/g;
+
+const getUnreadCountForUser = (unreadCounts, userId) => {
+    if (!unreadCounts || !userId) return 0;
+    if (typeof unreadCounts.get === "function") {
+        return Number(unreadCounts.get(userId) || 0);
+    }
+    return Number(unreadCounts[userId] || 0);
+};
+
 const AdminMessages = () => {
     // --- State & Context ---
-    const { user } = useContext(UserContext);
+    const { user, notifications = [], markNotificationAsRead } = useContext(UserContext);
     const [conversations, setConversations] = useState([]);
     const [selectedConversation, setSelectedConversation] = useState(null);
     const [messages, setMessages] = useState([]);
@@ -90,6 +100,59 @@ const AdminMessages = () => {
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
     const typingTimeoutRef = useRef(null);
+    const chatOptionsRef = useRef(null);
+
+    const getConversationId = (conversation) => {
+        if (!conversation) return null;
+        if (conversation.conversationId && conversation.conversationId !== conversation.participantId) {
+            return conversation.conversationId;
+        }
+        if (conversation._id && conversation._id !== conversation.participantId) {
+            return conversation._id;
+        }
+        return null;
+    };
+
+    const getConversationStorageKey = (conversation) =>
+        getConversationId(conversation) || conversation?.participantId || conversation?._id;
+
+    const markRelatedMessageNotificationsAsRead = useCallback(
+        (conversationId) => {
+            if (!conversationId || !Array.isArray(notifications) || typeof markNotificationAsRead !== 'function') return;
+            notifications.forEach((notification) => {
+                const relatedConversationId =
+                    notification?.relatedConversationId?._id || notification?.relatedConversationId;
+                if (
+                    notification &&
+                    notification.type === 'message' &&
+                    !notification.read &&
+                    relatedConversationId &&
+                    String(relatedConversationId) === String(conversationId)
+                ) {
+                    markNotificationAsRead(notification._id);
+                }
+            });
+        },
+        [notifications, markNotificationAsRead]
+    );
+
+    const markAsRead = useCallback(async (conv) => {
+        const conversationId = getConversationId(conv);
+        if (!conversationId) return;
+        try {
+            setConversations(prev => prev.map(c =>
+                getConversationId(c) === conversationId ? { ...c, unread: 0 } : c
+            ));
+
+            await axiosInstance.put(`/api/messages/read/${conversationId}`, {});
+            markRelatedMessageNotificationsAsRead(conversationId);
+            window.dispatchEvent(new CustomEvent("messages:unread-updated", {
+                detail: { conversationId }
+            }));
+        } catch (error) {
+            console.error("Failed to mark read", error);
+        }
+    }, [markRelatedMessageNotificationsAsRead]);
 
     // --- Helpers ---
     const scrollToBottom = () => {
@@ -105,6 +168,17 @@ const AdminMessages = () => {
         const handleClickOutside = () => setSelectedMessageId(null);
         document.addEventListener('click', handleClickOutside);
         return () => document.removeEventListener('click', handleClickOutside);
+    }, []);
+
+    // Close chat settings when clicking outside of the settings menu
+    useEffect(() => {
+        const handleOutsideChatOptions = (event) => {
+            if (chatOptionsRef.current && !chatOptionsRef.current.contains(event.target)) {
+                setShowChatOptions(false);
+            }
+        };
+        document.addEventListener('mousedown', handleOutsideChatOptions);
+        return () => document.removeEventListener('mousedown', handleOutsideChatOptions);
     }, []);
 
     // --- Socket.io Logic ---
@@ -136,6 +210,7 @@ const AdminMessages = () => {
                 ]);
                 scrollToBottom();
                 setIsOtherUserTyping(false);
+                markAsRead(selectedConversation);
             }
 
             // Always update the conversation list preview
@@ -201,7 +276,7 @@ const AdminMessages = () => {
             socket.off('userStatusChanged');
             socket.disconnect();
         };
-    }, [user, selectedConversation]);
+    }, [user, selectedConversation, markAsRead]);
 
     // --- Fetch Data Logic ---
     const fetchConversations = useCallback(async () => {
@@ -225,7 +300,7 @@ const AdminMessages = () => {
                             _id: conv._id,
                             lastMessage: conv.lastMessage || 'Start a conversation...',
                             timestamp: conv.lastMessageTime || new Date(),
-                            unread: conv.unreadCounts?.[user._id] || 0
+                            unread: getUnreadCountForUser(conv.unreadCounts, user._id)
                         };
                     });
                 }
@@ -299,50 +374,39 @@ const AdminMessages = () => {
 
     useEffect(() => {
         if (selectedConversation) {
-            fetchMessages(selectedConversation._id);
+            const conversationId = getConversationId(selectedConversation);
+            if (conversationId) {
+                fetchMessages(conversationId);
+                markAsRead(selectedConversation);
+            } else {
+                setMessages([]);
+            }
             setShowChatOptions(false);
         }
-    }, [selectedConversation, fetchMessages]);
-
-    // --- NEW: Mark as Read Function ---
-    const markAsRead = async (conv) => {
-        try {
-            // A. Immediate UI update
-            setConversations(prev => prev.map(c =>
-                c._id === conv._id ? { ...c, unread: 0 } : c
-            ));
-
-            // B. Persistent Backend update
-            await axiosInstance.put(`/api/messages/read/${conv._id}`, {
-                userId: user._id
-            });
-
-        } catch (error) {
-            console.error("Failed to mark read", error);
-        }
-    };
+    }, [selectedConversation, fetchMessages, markAsRead]);
 
     // --- Mute/Unmute Chat ---
     const handleMuteChat = async () => {
         if (!selectedConversation) return;
 
         try {
-            const isMuted = mutedConversations.includes(selectedConversation._id);
+            const conversationKey = getConversationStorageKey(selectedConversation);
+            const isMuted = mutedConversations.includes(conversationKey);
 
             if (isMuted) {
                 // Unmute
-                setMutedConversations(prev => prev.filter(id => id !== selectedConversation._id));
+                setMutedConversations(prev => prev.filter(id => id !== conversationKey));
                 // Save to localStorage
                 const saved = JSON.parse(localStorage.getItem('mutedConversations') || '[]');
-                const updated = saved.filter(id => id !== selectedConversation._id);
+                const updated = saved.filter(id => id !== conversationKey);
                 localStorage.setItem('mutedConversations', JSON.stringify(updated));
                 toast.success("Notifications enabled");
             } else {
                 // Mute
-                setMutedConversations(prev => [...prev, selectedConversation._id]);
+                setMutedConversations(prev => [...prev, conversationKey]);
                 // Save to localStorage
                 const saved = JSON.parse(localStorage.getItem('mutedConversations') || '[]');
-                localStorage.setItem('mutedConversations', JSON.stringify([...saved, selectedConversation._id]));
+                localStorage.setItem('mutedConversations', JSON.stringify([...saved, conversationKey]));
                 toast.success("Chat muted - notifications disabled");
             }
             setShowChatOptions(false);
@@ -442,66 +506,152 @@ const AdminMessages = () => {
         setMessageContextPos({ x, y });
     };
 
-    const handleSendMessage = useCallback(async (e) => {
-        e.preventDefault();
-        if (!messageText.trim() || !selectedConversation) return;
+    const renderMessageContent = useCallback((content) => {
+        const parts = String(content || "").split(URL_PATTERN);
+        return parts.map((part, index) => {
+            if (part.match(/^https?:\/\/[^\s]+$/i)) {
+                return (
+                    <a
+                        key={`link-${index}`}
+                        href={part}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline text-orange-300 hover:text-orange-200 break-all"
+                    >
+                        {part}
+                    </a>
+                );
+            }
+            return <React.Fragment key={`text-${index}`}>{part}</React.Fragment>;
+        });
+    }, []);
+
+    const buildJitsiMeetingLink = useCallback((isVideoCall = false) => {
+        const me = user?._id || "";
+        const other = selectedConversation?.participantId || "";
+        const roomSeed = [me, other].filter(Boolean).sort().join("-");
+        const roomName = `chronoflow-${isVideoCall ? "video" : "audio"}-${roomSeed}`.replace(/[^a-zA-Z0-9_-]/g, "");
+        return `https://meet.jit.si/${roomName}`;
+    }, [selectedConversation?.participantId, user?._id]);
+
+    const sendMessageWithContent = useCallback(async (rawContent) => {
+        const content = rawContent?.trim();
+        if (!content || !selectedConversation) return;
+
+        const payload = {
+            senderId: user._id,
+            recipientId: selectedConversation.participantId,
+            content
+        };
+
+        const existingConversationId = getConversationId(selectedConversation);
+        if (existingConversationId) {
+            payload.conversationId = existingConversationId;
+        }
+
+        const response = await axiosInstance.post('/api/messages/send', payload);
+        const resolvedConversationId = payload.conversationId || response.data.conversationId || existingConversationId;
+
+        // If this chat was created from user list, promote it to real conversation ID.
+        if (!existingConversationId && resolvedConversationId) {
+            setSelectedConversation(prev => (
+                prev
+                    ? { ...prev, _id: resolvedConversationId, conversationId: resolvedConversationId }
+                    : prev
+            ));
+        }
+
+        socket.emit('sendMessage', {
+            _id: response.data._id,
+            senderId: user._id,
+            senderName: user.name,
+            recipientId: selectedConversation.participantId,
+            content,
+            conversationId: resolvedConversationId,
+            timestamp: new Date()
+        });
+
+        setMessages(prev => [...prev, {
+            _id: response.data._id || Date.now().toString(),
+            senderId: user._id,
+            recipientId: selectedConversation.participantId,
+            content,
+            read: false,
+            timestamp: new Date()
+        }]);
+
+        setConversations(prev => {
+            const activeKey = getConversationStorageKey(selectedConversation);
+            const updated = prev.map((conv) =>
+                getConversationStorageKey(conv) === activeKey
+                    ? {
+                        ...conv,
+                        _id: resolvedConversationId || conv._id,
+                        conversationId: resolvedConversationId || conv.conversationId,
+                        lastMessage: content,
+                        timestamp: new Date()
+                    }
+                    : conv
+            );
+            return updated.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        });
+
+        scrollToBottom();
+    }, [selectedConversation, user]);
+
+    const handleStartCall = useCallback(async (isVideoCall = false) => {
+        if (!selectedConversation) return;
+
+        const callType = isVideoCall ? "Video" : "Audio";
 
         try {
-            const payload = {
-                senderId: user._id,
-                recipientId: selectedConversation.participantId,
-                content: messageText
-            };
-            if (selectedConversation._id && selectedConversation._id !== selectedConversation.participantId) {
-                payload.conversationId = selectedConversation._id;
+            const callLink = buildJitsiMeetingLink(isVideoCall);
+            const callWindow = window.open(callLink, "_blank", "noopener,noreferrer");
+            if (!callWindow) {
+                toast.error("Popup blocked. Please allow popups to start the call.");
             }
+            await sendMessageWithContent(`${callType} meeting link: ${callLink}`);
+            toast.success(`${callType} meeting link sent in chat.`);
+        } catch (error) {
+            console.error(`Failed to start ${callType.toLowerCase()} call:`, error);
+            toast.error(`Failed to start ${callType.toLowerCase()} meeting`);
+        }
+    }, [buildJitsiMeetingLink, selectedConversation, sendMessageWithContent]);
 
-            const response = await axiosInstance.post('/api/messages/send', payload);
+    const handleSendMessage = useCallback(async (e) => {
+        e.preventDefault();
+        if (!messageText.trim()) return;
 
-            // If new conversation, update ID
-            if (!selectedConversation._id || selectedConversation._id === selectedConversation.participantId) {
-                setSelectedConversation(prev => ({
-                    ...prev,
-                    _id: response.data.conversationId,
-                    conversationId: response.data.conversationId
-                }));
-            }
-
-            socket.emit('sendMessage', {
-                _id: response.data._id,
-                senderId: user._id,
-                senderName: user.name,
-                recipientId: selectedConversation.participantId,
-                content: messageText,
-                conversationId: payload.conversationId || response.data.conversationId,
-                timestamp: new Date()
-            });
-
-            setMessages(prev => [...prev, {
-                _id: response.data._id || Date.now().toString(),
-                senderId: user._id,
-                recipientId: selectedConversation.participantId,
-                content: messageText,
-                read: false,
-                timestamp: new Date()
-            }]);
+        try {
+            await sendMessageWithContent(messageText);
             setMessageText('');
-            scrollToBottom();
         } catch (error) {
             console.error('Failed to send message:', error);
             toast.error('Failed to send message');
         }
-    }, [messageText, selectedConversation, user]);
+    }, [messageText, sendMessageWithContent]);
 
     const handleClearChat = async () => {
         if (!selectedConversation) return;
         if (!window.confirm("Are you sure? This deletes all messages.")) return;
 
         try {
-            // Updated to use correct conversation ID
-            const targetId = selectedConversation.conversationId || selectedConversation._id;
+            const targetId = getConversationId(selectedConversation);
+            if (!targetId) {
+                setShowChatOptions(false);
+                toast("No chat history to clear yet.");
+                return;
+            }
+
             await axiosInstance.delete(`/api/messages/clear/${targetId}`);
             setMessages([]);
+            setConversations((prev) =>
+                prev.map((conv) =>
+                    getConversationStorageKey(conv) === getConversationStorageKey(selectedConversation)
+                        ? { ...conv, lastMessage: 'Start a conversation...' }
+                        : conv
+                )
+            );
             setShowChatOptions(false);
             toast.success("Chat cleared");
         } catch (error) {
@@ -530,30 +680,30 @@ const AdminMessages = () => {
         <>
                 <Navbar />
                 {/* <DashboardLayout activeMenu="Messages"> */}
-                <div className="flex h-[calc(100vh-120)] sm:h-[calc(100vh-100)] md:h-[calc(99vh-100px)] bg-[#050505] rounded-lg sm:rounded-2xl md:rounded-[20px] border border-white/5 overflow-hidden shadow-2xl relative">
+                <div className="flex h-[calc(100vh-120)] sm:h-[calc(100vh-100)] md:h-[calc(99vh-100px)] bg-gradient-to-br from-[#070c14] via-[#0b1421] to-[#060b12] rounded-lg sm:rounded-2xl md:rounded-[20px] border border-white/10 overflow-hidden shadow-[0_24px_80px_rgba(3,7,18,0.55)] relative">
 
                     {/* --- LEFT SIDEBAR --- */}
-                    <div className={`w-full sm:w-72 md:w-80 lg:w-96 border-r border-white/5 flex-col bg-[#0a0a0a]/80 backdrop-blur-2xl ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
-                        <div className="p-3 sm:p-4 md:p-6 border-b border-white/5 space-y-3 sm:space-y-4">
+                    <div className={`w-full sm:w-72 md:w-80 lg:w-96 border-r border-white/10 flex-col bg-gradient-to-b from-[#0f1724]/95 via-[#0d1420]/95 to-[#0b111b]/95 backdrop-blur-2xl ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
+                        <div className="p-3 sm:p-4 md:p-6 border-b border-white/10 space-y-3 sm:space-y-4 bg-white/[0.02]">
                             <div className="flex justify-between items-center">
                                 <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">Chats</h2>
-                                <div className="p-1.5 sm:p-2 bg-white/5 rounded-full border border-white/5 text-gray-400">
+                                <div className="p-1.5 sm:p-2 bg-white/10 rounded-full border border-white/10 text-slate-300">
                                     <MoreVertical className="w-3 sm:w-4 h-3 sm:h-4" />
                                 </div>
                             </div>
                             <div className="relative group">
-                                <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 w-3.5 sm:w-4 h-3.5 sm:h-4 text-gray-500" />
+                                <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 w-3.5 sm:w-4 h-3.5 sm:h-4 text-slate-500" />
                                 <input
                                     type="text"
                                     placeholder="Search people..."
-                                    className="w-full bg-[#151515] border border-white/5 rounded-lg sm:rounded-xl py-2 sm:py-3 pl-8 sm:pl-10 pr-3 sm:pr-4 text-xs sm:text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500/30 transition-all"
+                                    className="w-full bg-[#0d141f] border border-white/10 rounded-lg sm:rounded-xl py-2 sm:py-3 pl-8 sm:pl-10 pr-3 sm:pr-4 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-orange-400/40 focus:ring-2 focus:ring-orange-500/20 transition-all"
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                 />
                             </div>
                         </div>
 
-                        <motion.div variants={listContainerVariants} initial="visible" animate="visible" className="flex-1 overflow-y-auto custom-scrollbar p-2 sm:p-3 space-y-1.5 sm:space-y-2">
+                        <motion.div variants={listContainerVariants} initial="visible" animate="visible" className="flex-1 overflow-y-auto custom-scrollbar p-2 sm:p-3 space-y-1.5 sm:space-y-2 bg-gradient-to-b from-transparent to-black/10">
                             {isLoadingConversations ? (
                                 <div className="flex flex-col items-center justify-center h-40 space-y-3">
                                     <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
@@ -570,21 +720,21 @@ const AdminMessages = () => {
                                             if (conv.unread > 0) markAsRead(conv);
                                         }}
                                         className={`w-full flex items-center gap-2 sm:gap-4 p-2 sm:p-3 rounded-lg sm:rounded-2xl transition-all relative group ${selectedConversation?._id === conv._id
-                                                ? 'bg-gradient-to-r from-orange-500/10 to-transparent border border-orange-500/10'
-                                                : 'hover:bg-white/5 border border-transparent'
+                                                ? 'bg-gradient-to-r from-orange-500/15 via-orange-400/10 to-transparent border border-orange-400/25 shadow-[0_10px_30px_rgba(249,115,22,0.14)]'
+                                                : 'hover:bg-white/[0.04] border border-transparent hover:border-white/10'
                                             }`}
                                     >
                                         <div className="relative flex-shrink-0">
                                             {conv.participantImage ? (
-                                                <img src={getImageUrl(conv.participantImage)} alt={conv.participantName} className="w-10 sm:w-12 h-10 sm:h-12 rounded-full object-cover border border-white/10" />
+                                                <img src={getImageUrl(conv.participantImage)} alt={conv.participantName} className="w-10 sm:w-12 h-10 sm:h-12 rounded-full object-cover border border-white/20" />
                                             ) : (
-                                                <div className="w-10 sm:w-12 h-10 sm:h-12 rounded-full bg-gradient-to-br from-gray-800 to-black border border-white/10 flex items-center justify-center text-gray-400 font-bold text-sm sm:text-base">
+                                                <div className="w-10 sm:w-12 h-10 sm:h-12 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border border-white/15 flex items-center justify-center text-slate-100 font-bold text-sm sm:text-base">
                                                     {conv.participantName.charAt(0)}
                                                 </div>
                                             )}
                                             {/* Status Indicator */}
                                             <div className={`
-                                            absolute bottom-0 right-0 z-20 rounded-full border-2 border-[#050505]
+                                            absolute bottom-0 right-0 z-20 rounded-full border-2 border-[#0f1724]
                                             flex items-center justify-center w-3.5 h-3.5 transition-all duration-200
                                             ${getStatusColor(conv.participantStatus || 'offline')}
                                         `} title={getStatusLabel(conv.participantStatus || 'offline')} />
@@ -596,7 +746,7 @@ const AdminMessages = () => {
                                                         initial={{ scale: 0 }}
                                                         animate={{ scale: 1 }}
                                                         exit={{ scale: 0 }}
-                                                        className="absolute -top-1 -right-1 w-5 h-5 bg-orange-500 rounded-full text-white text-[10px] flex items-center justify-center font-bold shadow-lg border border-[#0a0a0a]"
+                                                        className="absolute -top-1 -right-1 w-5 h-5 bg-orange-500 rounded-full text-white text-[10px] flex items-center justify-center font-bold shadow-lg border border-[#101826]"
                                                     >
                                                         {conv.unread}
                                                     </motion.span>
@@ -606,14 +756,14 @@ const AdminMessages = () => {
 
                                         <div className="flex-1 text-left min-w-0">
                                             <div className="flex justify-between items-center mb-0.5 gap-2">
-                                                <h4 className={`text-xs sm:text-sm font-semibold truncate ${selectedConversation?._id === conv._id ? 'text-white' : 'text-gray-300 group-hover:text-white'}`}>
+                                                <h4 className={`text-xs sm:text-sm font-semibold truncate ${selectedConversation?._id === conv._id ? 'text-white' : 'text-slate-300 group-hover:text-white'}`}>
                                                     {conv.participantName}
                                                 </h4>
-                                                <span className="text-[8px] sm:text-[10px] text-gray-600 font-mono flex-shrink-0">
+                                                <span className="text-[8px] sm:text-[10px] text-slate-500 font-mono flex-shrink-0">
                                                     {new Date(conv.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                 </span>
                                             </div>
-                                            <p className={`text-[10px] sm:text-xs truncate ${conv.unread > 0 ? 'text-white font-medium' : 'text-gray-500'}`}>
+                                            <p className={`text-[10px] sm:text-xs truncate ${conv.unread > 0 ? 'text-white font-medium' : 'text-slate-500'}`}>
                                                 {conv.lastMessage}
                                             </p>
                                         </div>
@@ -668,14 +818,33 @@ const AdminMessages = () => {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-1">
-                                        <button className="hidden sm:block p-1.5 md:p-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg md:rounded-xl transition-all"><Phone className="w-3.5 md:w-4 h-3.5 md:h-4" /></button>
-                                        <button className="hidden sm:block p-1.5 md:p-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg md:rounded-xl transition-all"><Video className="w-3.5 md:w-4 h-3.5 md:h-4" /></button>
+                                        <button
+                                            onClick={() => handleStartCall(false)}
+                                            className="hidden sm:block p-1.5 md:p-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg md:rounded-xl transition-all"
+                                            title="Start audio call"
+                                        >
+                                            <Phone className="w-3.5 md:w-4 h-3.5 md:h-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => handleStartCall(true)}
+                                            className="hidden sm:block p-1.5 md:p-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg md:rounded-xl transition-all"
+                                            title="Start video call"
+                                        >
+                                            <Video className="w-3.5 md:w-4 h-3.5 md:h-4" />
+                                        </button>
                                         <div className="hidden sm:block w-px h-5 md:h-6 bg-white/10 mx-1 md:mx-2"></div>
 
                                         {/* --- DROPDOWN MENU --- */}
-                                        <div className="relative z-50">
+                                        <div
+                                            className="relative z-50"
+                                            ref={chatOptionsRef}
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
                                             <button
-                                                onClick={() => setShowChatOptions(!showChatOptions)}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setShowChatOptions((prev) => !prev);
+                                                }}
                                                 className={`p-1.5 md:p-2.5 rounded-lg md:rounded-xl transition-all duration-200 border border-transparent ${showChatOptions
                                                         ? 'bg-orange-500/10 text-orange-500 border-orange-500/20'
                                                         : 'text-gray-400 hover:text-white hover:bg-white/5'
@@ -707,20 +876,20 @@ const AdminMessages = () => {
                                                             </button>
                                                             <button
                                                                 onClick={handleMuteChat}
-                                                                className={`w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2.5 text-xs sm:text-sm font-medium rounded-lg sm:rounded-xl transition-colors group ${mutedConversations.includes(selectedConversation._id)
+                                                                className={`w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2.5 text-xs sm:text-sm font-medium rounded-lg sm:rounded-xl transition-colors group ${mutedConversations.includes(getConversationStorageKey(selectedConversation))
                                                                         ? 'text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10'
                                                                         : 'text-gray-300 hover:text-white hover:bg-white/5'
                                                                     }`}
                                                             >
-                                                                <div className={`p-1 sm:p-1.5 rounded-lg transition-colors flex-shrink-0 ${mutedConversations.includes(selectedConversation._id)
+                                                                <div className={`p-1 sm:p-1.5 rounded-lg transition-colors flex-shrink-0 ${mutedConversations.includes(getConversationStorageKey(selectedConversation))
                                                                         ? 'bg-yellow-500/20'
                                                                         : 'bg-white/5 group-hover:bg-white/10'
                                                                     }`}>
                                                                     <Bell className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
                                                                 </div>
                                                                 <div className="flex flex-col items-start min-w-0">
-                                                                    <span className="truncate">{mutedConversations.includes(selectedConversation._id) ? 'Unmute' : 'Mute'}</span>
-                                                                    <span className="text-[8px] sm:text-[10px] text-gray-500 font-normal truncate">{mutedConversations.includes(selectedConversation._id) ? 'Notifications enabled' : 'Stop notifications'}</span>
+                                                                    <span className="truncate">{mutedConversations.includes(getConversationStorageKey(selectedConversation)) ? 'Unmute' : 'Mute'}</span>
+                                                                    <span className="text-[8px] sm:text-[10px] text-gray-500 font-normal truncate">{mutedConversations.includes(getConversationStorageKey(selectedConversation)) ? 'Notifications enabled' : 'Stop notifications'}</span>
                                                                 </div>
                                                             </button>
                                                         </div>
@@ -753,7 +922,7 @@ const AdminMessages = () => {
                                                             onClick={() => setSelectedMessageId(null)}
                                                             className={`px-3 sm:px-4 md:px-5 py-2 sm:py-2.5 md:py-3 rounded-lg sm:rounded-2xl shadow-sm backdrop-blur-sm cursor-context-menu text-xs sm:text-sm ${isMe ? 'bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-tr-none shadow-orange-500/10' : 'bg-[#1a1a1a] border border-white/10 text-gray-200 rounded-tl-none hover:border-white/20 transition-colors'}`}
                                                         >
-                                                            <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                                                            <p className="text-sm leading-relaxed whitespace-pre-wrap">{renderMessageContent(msg.content)}</p>
                                                         </div>
                                                         <div className="flex items-center gap-1 mt-1 px-1">
                                                             <span className="text-[8px] sm:text-[10px] text-gray-500 font-mono opacity-70">{formatMessageDate(msg.timestamp)}</span>
