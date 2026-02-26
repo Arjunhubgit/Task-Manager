@@ -4,6 +4,7 @@ const {
   generateInviteLink,
   getMyInvites,
   verifyInvite,
+  joinTeamWithInvite,
   deactivateInvite,
   deleteInvite,
 } = require("../controllers/inviteControllers");
@@ -26,5 +27,9 @@ router.delete("/:inviteId", protect, adminOnly, deleteInvite);
 // ===== PUBLIC ROUTES (No authentication required) =====
 // Verify invite code validity (used during signup)
 router.get("/verify/:inviteCode", verifyInvite);
+
+// ===== MEMBER ROUTES (Protected) =====
+// Join a team using invite code
+router.post("/join", protect, joinTeamWithInvite);
 
 module.exports = router;

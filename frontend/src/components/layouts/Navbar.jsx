@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useContext, useEffect, useRef } from 'react';
-import { Menu, X, LayoutDashboard, Settings, Users, CheckSquare, LogOut, ChevronDown, User as UserIcon, Mail, AlertCircle, Loader } from "lucide-react";
+import { Menu, X, LayoutDashboard, Users, CheckSquare, LogOut, ChevronDown, User as UserIcon, Mail, AlertCircle, Loader } from "lucide-react";
 import { UserContext } from '../../context/userContext'; 
 import logo from '../../assets/svg/logo1.png';
 import title from '../../assets/svg/title.png';
@@ -14,12 +14,15 @@ import socket from '../../services/socket';
 
 
 const Navbar = ({ onMenuToggle, isMobileMenuOpen }) => {
-    const { user, clearUser, updateUserStatus } = useContext(UserContext); // Get user data and logout function
+    const { user, clearUser, updateUserStatus, updateUser } = useContext(UserContext); // Get user data and logout function
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [userStatus, setUserStatus] = useState(null); // Will be set from user.status
     const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
     const [isLoadingMessages, setIsLoadingMessages] = useState(false);
     const [messageError, setMessageError] = useState(null);
+    const [isJoinTeamOpen, setIsJoinTeamOpen] = useState(false);
+    const [teamCode, setTeamCode] = useState("");
+    const [isJoiningTeam, setIsJoiningTeam] = useState(false);
     const profileRef = useRef(null);
     const navigate = useNavigate();
 
@@ -112,14 +115,52 @@ const Navbar = ({ onMenuToggle, isMobileMenuOpen }) => {
         const handleClickOutside = (event) => {
             if (profileRef.current && !profileRef.current.contains(event.target)) {
                 setIsProfileOpen(false);
+                setIsJoinTeamOpen(false);
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
+    useEffect(() => {
+        if (!isProfileOpen) {
+            setIsJoinTeamOpen(false);
+            setTeamCode("");
+        }
+    }, [isProfileOpen]);
+
     // Determine online status: user must be logged in AND status must be 'online'
     const _isOnline = !!user && userStatus === 'online';
+
+    const handleJoinTeam = useCallback(async () => {
+        const inviteCode = teamCode.trim().toUpperCase();
+        if (!inviteCode) {
+            toast.error("Please enter a team code");
+            return;
+        }
+
+        try {
+            setIsJoiningTeam(true);
+            const response = await axiosInstance.post(API_PATHS.INVITES.JOIN_WITH_CODE, { inviteCode });
+            const updatedUser = response.data?.data?.user;
+
+            if (updatedUser && user) {
+                updateUser({
+                    ...user,
+                    ...updatedUser,
+                });
+            }
+
+            toast.success(response.data?.message || "Joined team successfully!");
+            setTeamCode("");
+            setIsJoinTeamOpen(false);
+            setIsProfileOpen(false);
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Failed to join team");
+        } finally {
+            setIsJoiningTeam(false);
+        }
+    }, [teamCode, updateUser, user]);
 
     return (
         <nav className="flex items-center justify-between px-4 sm:px-6 py-4 h-16 bg-[#050505]/80 backdrop-blur-xl border-b border-white/10 sticky top-0 z-[100] transition-all duration-300">
@@ -378,10 +419,41 @@ const Navbar = ({ onMenuToggle, isMobileMenuOpen }) => {
                                 <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors text-left">
                                     <UserIcon className="w-4 h-4" /> Profile
                                 </button>
-                                {user?.role !== "admin" && (
-                                    <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors text-left">
-                                        <Settings className="w-4 h-4" /> Settings
-                                    </button>
+                                {user?.role === "member" && (
+                                    <>
+                                        <button
+                                            onClick={() => setIsJoinTeamOpen((prev) => !prev)}
+                                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors text-left"
+                                        >
+                                            <Users className="w-4 h-4" /> Join Team
+                                        </button>
+
+                                        {isJoinTeamOpen && (
+                                            <div className="px-3 pb-2">
+                                                <div className="space-y-2 rounded-lg border border-white/10 bg-white/[0.02] p-2.5">
+                                                    <input
+                                                        type="text"
+                                                        value={teamCode}
+                                                        onChange={(e) => setTeamCode(e.target.value)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === "Enter") {
+                                                                handleJoinTeam();
+                                                            }
+                                                        }}
+                                                        placeholder="Enter team code"
+                                                        className="w-full rounded-md bg-black/40 border border-white/10 px-2.5 py-1.5 text-xs text-gray-200 placeholder:text-gray-500 focus:outline-none focus:border-orange-500/60"
+                                                    />
+                                                    <button
+                                                        onClick={handleJoinTeam}
+                                                        disabled={isJoiningTeam}
+                                                        className="w-full rounded-md bg-orange-500/20 text-orange-300 hover:bg-orange-500/30 disabled:opacity-50 disabled:cursor-not-allowed px-2.5 py-1.5 text-xs font-medium transition-colors"
+                                                    >
+                                                        {isJoiningTeam ? "Joining..." : "Join"}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                             </div>
 

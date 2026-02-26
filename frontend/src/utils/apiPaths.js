@@ -14,6 +14,11 @@ export const API_PATHS = {
     LOGOUT: "/api/auth/logout",
   },
 
+  INVITES: {
+    VERIFY: (inviteCode) => `/api/invites/verify/${inviteCode}`,
+    JOIN_WITH_CODE: "/api/invites/join",
+  },
+
   USERS: {
     GET_ALL_USERS: "/api/users",
     GET_USER_BY_ID: (userId) => `/api/users/${userId}`,

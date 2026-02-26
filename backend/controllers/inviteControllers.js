@@ -1,6 +1,10 @@
 const AdminInvite = require("../models/AdminInvite");
 const User = require("../models/User");
 const crypto = require("crypto");
+const {
+  createNotification,
+  createNotificationsForUsers,
+} = require("../utils/notificationService");
 
 // Helper function to generate unique invite code
 const generateInviteCode = () => {
@@ -172,6 +176,167 @@ const verifyInvite = async (req, res) => {
   }
 };
 
+// @desc    Join a team using invite code for a logged-in member
+// @route   POST /api/invites/join
+// @access  Private (Member only)
+const joinTeamWithInvite = async (req, res) => {
+  try {
+    const { inviteCode } = req.body;
+    const memberId = req.user?._id;
+
+    if (!inviteCode || !inviteCode.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Invite code is required",
+      });
+    }
+
+    if (!memberId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    if (req.user.role !== "member") {
+      return res.status(403).json({
+        success: false,
+        message: "Only members can join a team with an invite code",
+      });
+    }
+
+    const member = await User.findById(memberId).select("-password");
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const invite = await AdminInvite.findOne({
+      inviteCode: inviteCode.trim().toUpperCase(),
+    }).populate("adminId", "_id name email");
+
+    if (!invite) {
+      return res.status(404).json({
+        success: false,
+        message: "Invalid invite code",
+      });
+    }
+
+    if (!invite.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: "This invite has been deactivated",
+      });
+    }
+
+    if (invite.expiresAt && new Date() > invite.expiresAt) {
+      await AdminInvite.findByIdAndUpdate(invite._id, { isActive: false });
+      return res.status(400).json({
+        success: false,
+        message: "This invite has expired",
+      });
+    }
+
+    const targetAdminId = invite.adminId?._id?.toString();
+    if (!targetAdminId) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid invite owner",
+      });
+    }
+
+    if (
+      member.parentAdminId &&
+      member.parentAdminId.toString() === targetAdminId
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "You are already in this team",
+      });
+    }
+
+    const alreadyUsedByMember = (invite.usedBy || []).some(
+      (usage) => usage.userId && usage.userId.toString() === memberId.toString()
+    );
+
+    if (
+      invite.maxUses &&
+      invite.timesUsed >= invite.maxUses &&
+      !alreadyUsedByMember
+    ) {
+      await AdminInvite.findByIdAndUpdate(invite._id, { isActive: false });
+      return res.status(400).json({
+        success: false,
+        message: "This invite has reached its usage limit",
+      });
+    }
+
+    if (!alreadyUsedByMember) {
+      invite.timesUsed += 1;
+      invite.usedBy.push({ userId: member._id });
+
+      if (invite.maxUses && invite.timesUsed >= invite.maxUses) {
+        invite.isActive = false;
+      }
+
+      await invite.save();
+    }
+
+    member.parentAdminId = invite.adminId._id;
+    member.role = "member";
+    await member.save();
+
+    await createNotification({
+      userId: targetAdminId,
+      type: "team_member",
+      title: "New team member joined",
+      message: `${member.name} joined your team using an invite code.`,
+      relatedUserId: member._id,
+    });
+
+    const teammateIds = await User.find({
+      parentAdminId: targetAdminId,
+      role: "member",
+      _id: { $ne: member._id },
+    }).select("_id");
+
+    await createNotificationsForUsers(
+      teammateIds.map((teammate) => teammate._id),
+      {
+        type: "team_member",
+        title: "New teammate joined",
+        message: `${member.name} joined your team.`,
+        relatedUserId: member._id,
+      }
+    );
+
+    res.json({
+      success: true,
+      message: "Joined team successfully!",
+      data: {
+        user: {
+          _id: member._id,
+          role: member.role,
+          parentAdminId: member.parentAdminId,
+        },
+        admin: {
+          _id: invite.adminId._id,
+          name: invite.adminId.name,
+          email: invite.adminId.email,
+        },
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
+
 // @desc    Deactivate an invite link
 // @route   PUT /api/invites/:inviteId/deactivate
 // @access  Private (Admin only - owner)
@@ -250,6 +415,7 @@ module.exports = {
   generateInviteLink,
   getMyInvites,
   verifyInvite,
+  joinTeamWithInvite,
   deactivateInvite,
   deleteInvite,
 };
