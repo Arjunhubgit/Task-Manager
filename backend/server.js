@@ -15,11 +15,21 @@ const hostRoutes = require("./routes/hostRoutes");
 const inviteRoutes = require("./routes/inviteRoutes");
 
 const app = express();
+const allowedOrigins = (process.env.CLIENT_URL || "*")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const isOriginAllowed = (origin) =>
+  allowedOrigins.includes("*") || allowedOrigins.includes(origin);
 
 // Middleware to handle CORS
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "*",
+    origin: (origin, callback) => {
+      if (!origin || isOriginAllowed(origin)) return callback(null, true);
+      return callback(new Error("Not allowed by CORS"));
+    },
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
@@ -40,6 +50,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/messages", messagingRoutes);
 app.use("/api/host", hostRoutes);
 app.use("/api/invites", inviteRoutes);
+app.get("/api/health", (_req, res) => res.status(200).json({ ok: true }));
 
 // Server uploads
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
@@ -49,7 +60,21 @@ startConversationCleanup();
 
 // --- Socket.io Setup ---
 const http = require("http").createServer(app);
-const io = require("socket.io")(http, { cors: { origin: "*" } });
+const io = require("socket.io")(http, { 
+  cors: { 
+    origin: (origin, callback) => {
+      if (!origin || isOriginAllowed(origin)) return callback(null, true);
+      return callback("Not allowed by CORS", false);
+    },
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+  },
+  pingInterval: 25000,
+  pingTimeout: 20000,
+  transports: ['websocket', 'polling'],
+  upgradeTimeout: 30000,
+  maxHttpBufferSize: 1e6
+});
 
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
@@ -88,6 +113,11 @@ io.on("connection", (socket) => {
   // Handle disconnect
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
+  });
+
+  // Handle errors
+  socket.on("error", (error) => {
+    console.error("Socket error:", error);
   });
 });
 

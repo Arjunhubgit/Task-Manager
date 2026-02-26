@@ -19,6 +19,8 @@ const {
   getMemberInsights,
   aiAssistTask,
   planMemberDay,
+  autoSummarizeTask,
+  analyzeTaskDescription,
 } = require("../controllers/taskControllers");
 
 const router = express.Router();
@@ -35,11 +37,13 @@ router.post("/member/plan-day", protect, planMemberDay);
 // 2. AI Routes
 router.post("/ai-create", protect, adminOnly, createTaskFromAI);
 router.post("/ai-generate-subtasks", protect, adminOnly, generateSubtasks);
+router.post("/ai-analyze", protect, analyzeTaskDescription);
 
 // 3. CRUD Operations
 router.get("/", protect, getTasks);
 router.post("/", protect, adminOnly, createTask);
 router.post("/:id/ai-assist", protect, aiAssistTask);
+router.post("/:id/auto-summarize", protect, autoSummarizeTask);
 
 router.get("/:id", protect, getTaskById);
 router.put("/:id", protect, updateTask);

@@ -3,6 +3,7 @@ const User = require("../models/User");
 const Groq = require("groq-sdk"); // 
 const jwt = require("jsonwebtoken");
 const { logActivity } = require("../utils/auditLogger");
+const TaskAIService = require("../utils/TaskAIService");
 const {
     createNotificationsForUsers,
     buildTaskCompletionCopy,
@@ -15,6 +16,60 @@ const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_
 
 // Config: Use Llama 3 for best speed/intelligence balance
 const AI_MODEL = "llama-3.3-70b-versatile";
+
+// =====================================================================
+// --- AI MODEL ROUTING (Smart Model Selection) ---
+// =====================================================================
+
+/**
+ * Assess task complexity based on various factors
+ * Returns: 'simple' | 'medium' | 'complex'
+ */
+const assessTaskComplexity = (task) => {
+    let complexityScore = 0;
+
+    // Description length (simple = short, complex = long)
+    if (task.description) {
+        const descLength = task.description.length;
+        if (descLength > 500) complexityScore += 2;
+        else if (descLength > 200) complexityScore += 1;
+    }
+
+    // Number of assignees (more people = more complex)
+    if (task.assignedTo && task.assignedTo.length > 1) complexityScore += 1;
+
+    // Priority (high = more complex)
+    if (task.priority === 'High') complexityScore += 2;
+    else if (task.priority === 'Medium') complexityScore += 1;
+
+    // Checklists (many subtasks = more complex)
+    if (task.todoChecklist && task.todoChecklist.length > 5) complexityScore += 2;
+    else if (task.todoChecklist && task.todoChecklist.length > 0) complexityScore += 1;
+
+    // Dependencies/Attachments indicate complexity
+    if (task.attachments && task.attachments.length > 2) complexityScore += 1;
+
+    // Comments indicate ongoing discussion/complexity
+    if (task.comments && task.comments.length > 5) complexityScore += 1;
+
+    // Determine complexity level
+    if (complexityScore >= 5) return 'complex';
+    if (complexityScore >= 2) return 'medium';
+    return 'simple';
+};
+
+/**
+ * Select optimal AI model based on task complexity
+ * Balances speed, quality, and cost
+ */
+const selectAIModel = (taskComplexity) => {
+    const models = {
+        simple: 'llama-3.1-8b-instant',      // 💰 Cost-efficient, fast
+        medium: 'llama-3.3-70b-versatile',   // 🎯 Balanced (default)
+        complex: 'llama-3.3-70b-versatile',  // 🧠 Best reasoning
+    };
+    return models[taskComplexity] || 'llama-3.3-70b-versatile';
+};
 
 // =====================================================================
 // --- HELPER: AI PRIORITY & SUMMARY ---
@@ -193,8 +248,21 @@ const getTaskById = async (req, res) => {
             .populate("createdBy", "name email profileImageUrl")
             .populate("comments.userId", "name email profileImageUrl role");
         if (!task) return res.status(404).json({ message: "Task not found" });
-        res.json(task);
+        
+        // Permission check: User can view task if they created it, are assigned to it, or are admin
+        const user = req.user;
+        const createdByMatch = task.createdBy && task.createdBy._id.toString() === user._id.toString();
+        const assignedToMatch = task.assignedTo && task.assignedTo.some(u => u._id.toString() === user._id.toString());
+        const isAdmin = user.role === "admin";
+        
+        if (isAdmin || createdByMatch || assignedToMatch) {
+            return res.json(task);
+        }
+        
+        console.warn(`Access denied for user ${user._id}. Creator: ${task.createdBy?._id}, Assigned to: ${task.assignedTo?.map(u => u._id).join(', ')}, User role: ${user.role}`);
+        return res.status(403).json({ message: "You don't have permission to view this task" });
     } catch (error) {
+        console.error("Error in getTaskById:", error);
         res.status(500).json({ message: "Server error", error: error.message });
     }
 };
@@ -208,23 +276,69 @@ const createTask = async (req, res) => {
              return res.status(400).json({ message: "Task must be assigned to at least one user." });
         }
         
-        if (!priority && description) {
-            const aiResult = await getAIPriorityAndSummary(description, req.user.role);
-            if (aiResult) {
-                priority = aiResult.suggestedPriority; 
-                aiSummary = aiResult.aiSummary; 
-            } else {
-                priority = 'Medium';
+        // Initialize AI analysis object
+        let aiAnalysis = { lastAnalyzedAt: new Date() };
+        let aiSuggestedTags = [];
+        let complexity = "Medium";
+        let estimatedHours = null;
+        let suggestedSubtasks = [];
+        
+        // Use TaskAIService for comprehensive analysis if description provided
+        if (description) {
+            try {
+                // Get full task analysis
+                const analysis = await TaskAIService.analyzeTask(title, description, req.user.role);
+                if (analysis) {
+                    priority = priority || analysis.priority;
+                    aiSummary = aiSummary || analysis.summary;
+                    complexity = analysis.complexity;
+                    estimatedHours = analysis.estimatedHours;
+                    aiAnalysis = {
+                        priority: analysis.priority,
+                        reasoning: analysis.reasoning,
+                        riskFactors: analysis.riskFactors || [],
+                        successCriteria: [],
+                        lastAnalyzedAt: new Date(),
+                    };
+                    
+                    // Get suggested tags
+                    const suggestedTags = await TaskAIService.suggestTaskTags(title, description, []);
+                    aiSuggestedTags = suggestedTags;
+                    
+                    // Get suggested subtasks if description is detailed enough
+                    if (description.length > 50) {
+                        const decomposition = await TaskAIService.suggestDecomposition(title, description);
+                        suggestedSubtasks = decomposition.subtasks || [];
+                        aiAnalysis.successCriteria = decomposition.successCriteria || [];
+                    }
+                }
+            } catch (aiError) {
+                console.error("AI analysis error during task creation:", aiError.message);
+                // Gracefully fallback to basic analysis
+                priority = priority || 'Medium';
             }
         }
         
         const task = new Task({
-            title, description, priority: priority || 'Medium', dueDate, assignedTo,
-            createdBy: req.user._id, todoChecklist, attachments, aiSummary 
+            title, 
+            description, 
+            priority: priority || 'Medium', 
+            dueDate, 
+            assignedTo,
+            createdBy: req.user._id, 
+            todoChecklist, 
+            attachments, 
+            aiSummary,
+            complexity,
+            estimatedHours,
+            aiSuggestedTags,
+            suggestedSubtasks,
+            aiAnalysis,
+            lastAISummary: new Date(),
         });
         await task.save();
 
-        // � Log activity
+        // Log activity
         await logActivity(
             req.user._id,
             "CREATE_TASK",
@@ -432,7 +546,22 @@ const endOfDay = (dateInput) => {
     return value;
 };
 
-const fallbackTaskAssist = (task, mode) => {
+const fallbackTaskAssist = (task, mode, question = "") => {
+    const q = String(question || "").trim().toLowerCase();
+    if (q) {
+        if (/(due|deadline|submit|submission|when)/.test(q)) {
+            return task.dueDate
+                ? `This task is due on ${new Date(task.dueDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}.`
+                : "No due date is set for this task yet.";
+        }
+        if (/(priority|urgent|importance)/.test(q)) {
+            return `Priority is ${task.priority || "Not set"}.`;
+        }
+        if (/(status|progress)/.test(q)) {
+            return `Current status is ${task.status || "Not set"} with ${task.progress || 0}% progress.`;
+        }
+    }
+
     if (mode === "summary") {
         return `Task "${task.title}" is currently ${task.status.toLowerCase()} with ${task.progress || 0}% progress. Focus on the next checklist item and due date commitments.`;
     }
@@ -678,12 +807,63 @@ const getUserDashboardData = async (req, res) => {
 
 const createTaskFromAI = async (req, res) => {
   try {
-    const { prompt, assignedTo } = req.body; // Accept assignedTo from body
+    const { prompt, assignedTo, teamMembers } = req.body;
     if (!prompt) return res.status(400).json({ message: "Prompt is required" });
+
+    // ✅ Check if Groq is configured
+    if (!groq) {
+      return res.status(500).json({ 
+        message: "AI service not configured. Please set GROQ_API_KEY in environment variables." 
+      });
+    }
+
+    const normalizedTeamMembers = Array.isArray(teamMembers)
+      ? teamMembers
+          .map((member) => {
+            const id = member?._id || member?.id;
+            const name = String(member?.name || "").trim();
+            const email = String(member?.email || "").trim();
+            if (!id || !name) return null;
+            return {
+              id: String(id),
+              name,
+              email,
+              nameKey: name.toLowerCase(),
+              emailKey: email.toLowerCase(),
+            };
+          })
+          .filter(Boolean)
+      : [];
+
+    const teamMembersContext =
+      normalizedTeamMembers.length > 0
+        ? normalizedTeamMembers
+            .map((member, index) => `${index + 1}. ${member.name} (${member.email || "no-email"})`)
+            .join("\n")
+        : "No team members provided.";
 
     const aiPrompt = `
       You are an expert Project Manager. Create a detailed JSON task from this user request: "${prompt}".
-      ... (rest of your AI prompt logic) ...
+      
+      Return ONLY a valid JSON object with these fields:
+      {
+        "title": "Clear, actionable task title",
+        "description": "Detailed description of what needs to be done",
+        "priority": "High|Medium|Low",
+        "dueDate": "YYYY-MM-DD format date string or null",
+        "todoChecklist": ["subtask 1", "subtask 2", "subtask 3"],
+        "estimatedHours": number (rough estimate),
+        "tags": ["tag1", "tag2", "tag3"],
+        "suggestedAssignees": ["name from the provided team member list only"]
+      }
+
+      Assignment rules:
+      - Use only names from this team member list.
+      - If no suitable assignee is clear, return an empty array for "suggestedAssignees".
+      - Do not invent names.
+
+      Team members:
+      ${teamMembersContext}
     `;
 
     try {
@@ -698,22 +878,85 @@ const createTaskFromAI = async (req, res) => {
 
       const taskData = JSON.parse(completion.choices[0]?.message?.content || "{}");
 
-      const newTask = await Task.create({
-        title: taskData.title || "New Task",
-        description: taskData.description || prompt,
-        priority: taskData.priority || "Medium",
-        dueDate: taskData.dueDate ? new Date(taskData.dueDate) : new Date(Date.now() + 7 * 86400000),
-        todoChecklist: taskData.todoChecklist || [],
-        status: "Pending",
-        assignedTo: assignedTo || [req.user._id], // Use provided assignees or default to creator
-        createdBy: req.user._id
+      const normalizedAssignees = Array.isArray(assignedTo)
+        ? assignedTo.map((id) => String(id).trim()).filter(Boolean)
+        : [];
+
+      const suggestedAssigneeNames = Array.isArray(taskData.suggestedAssignees)
+        ? taskData.suggestedAssignees.map((name) => String(name || "").trim()).filter(Boolean)
+        : [];
+
+      const suggestedAssigneeDetails = [];
+      const suggestedAssigneeIds = [];
+      suggestedAssigneeNames.forEach((name) => {
+        const searchKey = name.toLowerCase();
+        const match = normalizedTeamMembers.find((member) =>
+          member.nameKey === searchKey ||
+          member.emailKey === searchKey ||
+          member.nameKey.includes(searchKey) ||
+          searchKey.includes(member.nameKey)
+        );
+        if (match && !suggestedAssigneeIds.includes(match.id)) {
+          suggestedAssigneeIds.push(match.id);
+          suggestedAssigneeDetails.push({
+            id: match.id,
+            name: match.name,
+            email: match.email,
+          });
+        }
       });
 
-      res.status(201).json(newTask);
+      const finalAssigneeIds = normalizedAssignees.length > 0
+        ? normalizedAssignees
+        : suggestedAssigneeIds;
+
+      // ✅ Generate comprehensive AI analysis using TaskAIService
+      const aiAnalysis = await TaskAIService.analyzeTask(
+        taskData.title || "New Task",
+        taskData.description || prompt,
+        req.user.role
+      );
+
+      // Merge AI analysis with generated task data
+      const enrichedTask = {
+        title: taskData.title || "New Task",
+        description: taskData.description || prompt,
+        priority: aiAnalysis.priority || taskData.priority || "Medium",
+        complexity: aiAnalysis.complexity || "Medium",
+        estimatedHours: aiAnalysis.estimatedHours || taskData.estimatedHours || 2,
+        dueDate: taskData.dueDate ? new Date(taskData.dueDate) : new Date(Date.now() + 7 * 86400000),
+        todoChecklist: (taskData.todoChecklist || []).map(item => ({
+          text: item,
+          completed: false
+        })),
+        tags: taskData.tags || aiAnalysis.suggestedTags || [],
+        status: "Pending",
+        assignedTo: finalAssigneeIds,
+        createdBy: req.user._id,
+        aiAnalysis: {
+          summary: aiAnalysis.summary,
+          reasoning: aiAnalysis.reasoning,
+          riskFactors: aiAnalysis.riskFactors || [],
+          priority: aiAnalysis.priority,
+          complexity: aiAnalysis.complexity,
+          estimatedHours: aiAnalysis.estimatedHours,
+          suggestedTags: aiAnalysis.suggestedTags || [],
+          suggestedAssignees: suggestedAssigneeDetails,
+        }
+      };
+
+      // ✅ Return task data with AI analysis for frontend to review
+      res.status(201).json({
+        task: enrichedTask,
+        aiAnalysis: enrichedTask.aiAnalysis
+      });
 
     } catch (aiError) {
       console.error("Groq Create Task Error:", aiError);
-      res.status(500).json({ message: "AI processing failed" });
+      res.status(500).json({ 
+        message: "AI processing failed. Please check your GROQ_API_KEY and try again.",
+        error: aiError.message 
+      });
     }
   } catch (error) {
     res.status(500).json({ message: "Failed to create task", error: error.message });
@@ -1004,34 +1247,69 @@ const aiAssistTask = async (req, res) => {
     try {
         const { id } = req.params;
         const mode = String(req.body.mode || "").trim();
+        const question = String(req.body.question || "").trim();
         const allowedModes = ["summary", "subtasks", "next_step"];
         if (!allowedModes.includes(mode)) {
             return res.status(400).json({ message: "Invalid mode. Use summary, subtasks, or next_step." });
         }
 
         const task = await Task.findById(id).select(
-            "title description priority status dueDate progress todoChecklist aiSummary comments"
+            "title description priority status dueDate progress todoChecklist aiSummary comments createdBy assignedTo"
         );
         if (!task) return res.status(404).json({ message: "Task not found" });
+        
+        // Allow AI assist for any user who can view the task
+        // (admin, creator, or assigned user)
         if (!canUserAccessTask(task, req.user)) {
+            console.warn(`[AI_ASSIST] Authorization denied:`, {
+                userId: req.user._id,
+                taskId: id,
+                taskcreatedBy: task.createdBy,
+                taskAssignedTo: task.assignedTo,
+                userRole: req.user.role
+            });
             return res.status(403).json({ message: "Not authorized to access this task" });
         }
 
-        const fallback = fallbackTaskAssist(task, mode);
+        const fallback = fallbackTaskAssist(task, mode, question);
         if (!process.env.GROQ_API_KEY) {
             return res.status(200).json({ mode, content: fallback, source: "fallback" });
         }
 
+        // 🎯 Smart Model Selection based on task complexity
+        const taskComplexity = assessTaskComplexity(task);
+        const selectedModel = selectAIModel(taskComplexity);
+
+        const hasQuestion = Boolean(question);
+        const taskContext = {
+            title: task.title,
+            description: task.description || "",
+            priority: task.priority,
+            status: task.status,
+            dueDate: task.dueDate,
+            progress: task.progress || 0,
+            todoChecklist: task.todoChecklist || [],
+            aiSummary: task.aiSummary || "",
+            commentsCount: Array.isArray(task.comments) ? task.comments.length : 0,
+        };
+
         const prompt = `
             You are a senior productivity assistant helping an assigned team member.
-            Task JSON: ${JSON.stringify(task)}
+            Task JSON: ${JSON.stringify(taskContext)}
             Mode: ${mode}
+            User question: ${hasQuestion ? JSON.stringify(question) : '"(none)"'}
 
             Rules:
             - Keep response concise and actionable.
             - Use plain text.
-            - If mode=subtasks, return a numbered list (3-6 steps).
-            - If mode=next_step, provide exactly one next best action.
+            - If user question is present, answer that exact question first using task data.
+            - If asked about due/submission date, return the dueDate from task data clearly.
+            - If asked about status/progress/priority, answer with exact values from task data.
+            - Only if there is no user question:
+              - If mode=subtasks, return a numbered list (3-6 steps).
+              - If mode=next_step, provide exactly one next best action.
+              - If mode=summary, provide a short summary.
+            - If requested information is missing, say it is not available.
         `;
 
         try {
@@ -1040,13 +1318,14 @@ const aiAssistTask = async (req, res) => {
                     { role: "system", content: "You produce practical productivity guidance." },
                     { role: "user", content: prompt },
                 ],
-                model: AI_MODEL,
+                model: selectedModel,
             });
             const content = completion.choices?.[0]?.message?.content?.trim() || fallback;
             return res.status(200).json({
                 mode,
                 content,
-                model: AI_MODEL,
+                model: selectedModel,
+                complexity: taskComplexity,
                 source: "ai",
             });
         } catch (aiError) {
@@ -1167,11 +1446,126 @@ const planMemberDay = async (req, res) => {
     }
 };
 
+// @desc    Auto-summarize a task using AI (Phase 1)
+// @route   POST /tasks/:id/auto-summarize
+// @access  Private
+const autoSummarizeTask = async (req, res) => {
+    try {
+        const task = await Task.findById(req.params.id);
+        if (!task) {
+            return res.status(404).json({ message: "Task not found" });
+        }
+
+        // Check authorization - allow if user can access the task
+        if (!canUserAccessTask(task, req.user)) {
+            console.warn(`[AUTO_SUMMARIZE] Authorization denied:`, {
+                userId: req.user._id,
+                taskId: req.params.id,
+                taskCreatedBy: task.createdBy,
+                taskAssignedTo: task.assignedTo,
+                userRole: req.user.role
+            });
+            return res.status(403).json({ message: "Not authorized to access this task" });
+        }
+
+        // Check if task has been analyzed recently (within 1 hour) to avoid redundant calls
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        if (task.lastAISummary && new Date(task.lastAISummary) > oneHourAgo) {
+            return res.status(200).json({ 
+                message: "Task summary already current", 
+                summary: task.aiSummary,
+                cached: true,
+            });
+        }
+
+        // Generate fresh summary
+        const summary = await TaskAIService.generateTaskSummary(task);
+        const riskAssessment = await TaskAIService.assessTaskRisk(task, []);
+
+        // Update task with new summary
+        task.aiSummary = summary;
+        task.lastAISummary = new Date();
+        if (task.aiAnalysis) {
+            task.aiAnalysis.reasoning = riskAssessment;
+        }
+        await task.save();
+
+        // Log activity
+        await logActivity(
+            req.user._id,
+            "TASK_AUTO_SUMMARIZE",
+            `Task ${task.title} was auto-summarized`,
+            { taskId: task._id }
+        );
+
+        res.status(200).json({
+            message: "Task summarized successfully",
+            summary: task.aiSummary,
+            riskAssessment,
+            cached: false,
+        });
+    } catch (error) {
+        console.error("Auto-summarize error:", error.message);
+        res.status(500).json({ message: "Failed to summarize task", error: error.message });
+    }
+};
+
+// @desc    Analyze task description without saving (for UI preview)
+// @route   POST /api/tasks/ai-analyze
+// @access  Private
+const analyzeTaskDescription = async (req, res) => {
+    try {
+        const { title, description, userRole } = req.body;
+
+        if (!description || description.trim().length < 10) {
+            return res.status(400).json({ 
+                message: "Description too short. Provide at least 10 characters." 
+            });
+        }
+
+        // Use TaskAIService to analyze
+        const analysis = await TaskAIService.analyzeTask(
+            title || 'Untitled Task',
+            description,
+            userRole || 'user'
+        );
+
+        // Also get suggested subtasks if description is detailed
+        let decomposition = { subtasks: [], successCriteria: [] };
+        if (description.length > 50) {
+            decomposition = await TaskAIService.suggestDecomposition(
+                title || 'Task',
+                description
+            );
+            if (analysis.aiAnalysis) {
+                analysis.aiAnalysis.successCriteria = decomposition.successCriteria;
+            }
+        }
+
+        // Merge suggested subtasks into analysis
+        const finalAnalysis = {
+            ...analysis,
+            suggestedSubtasks: decomposition.subtasks,
+        };
+
+        res.status(200).json({
+            message: "Task analyzed successfully",
+            analysis: finalAnalysis
+        });
+    } catch (error) {
+        console.error("Task analysis error:", error.message);
+        res.status(500).json({ 
+            message: "Failed to analyze task", 
+            error: error.message 
+        });
+    }
+};
+
 module.exports = {
     getTasks, getTaskById, createTask, updateTask, deleteTask,
     updateTaskStatus, updateTaskChecklist, addTaskComment, getTaskComments,
     getDashboardData, getUserDashboardData,
     createTaskFromAI, generateSubtasks, getAllTasksGlobal,
-    getMemberAgenda, getMemberInsights, aiAssistTask, planMemberDay
+    getMemberAgenda, getMemberInsights, aiAssistTask, planMemberDay,
+    autoSummarizeTask, analyzeTaskDescription
 };
-
