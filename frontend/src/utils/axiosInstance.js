@@ -41,8 +41,9 @@ axiosInstance.interceptors.response.use(
       if (error.response) {
         const status = error.response.status;
         if (status === 401) {
-          // Redirect to login page
-          window.location.href = "/login";
+          // Do NOT redirect to login page on 401 for login endpoint, let UI handle error display
+          // Only redirect if already logged in and token expired (optional: check request URL)
+          // window.location.href = "/login";
         } else if (status === 500) {
           console.error("Server error (500). Please try again later.", error.response.data);
         } else {

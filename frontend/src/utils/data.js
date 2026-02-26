@@ -4,12 +4,10 @@ import {
   LuClipboardCheck,
   LuSquarePlus,
   LuShield,
-  LuSettings,
   LuTrendingUp,
   LuBell,
   LuCalendarClock,
-  LuSunMedium,
-  LuMessagesSquare
+  LuSunMedium
 } from "react-icons/lu";
 import { FaChartColumn,  } from "react-icons/fa6";
 export const SIDE_MENU_DATA = [
@@ -55,12 +53,6 @@ export const SIDE_MENU_DATA = [
     icon: LuBell,
     path: "/admin/notifications",
   },
-  {
-    id: "10",
-    label: "Settings",
-    icon: LuSettings,
-    path: "/admin/settings",
-  },
 ];
 
 export const SIDE_MENU_USER_DATA = [
@@ -87,12 +79,6 @@ export const SIDE_MENU_USER_DATA = [
     label: "Task Calendar",
     icon: LuCalendarClock,
     path: "/user/calendar",
-  },
-  {
-    id: "05",
-    label: "Messages",
-    icon: LuMessagesSquare,
-    path: "/user/messages",
   },
   {
     id: "06",

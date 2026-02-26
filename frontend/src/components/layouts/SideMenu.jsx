@@ -126,15 +126,17 @@ const SideMenu = ({ activeMenu, isMobile, onMobileClose }) => {
 
           {!isCollapsed && (
             <div className="w-full text-center">
-              <h5 className="font-bold text-gray-200 text-sm leading-tight">{user?.name || "User"}</h5>
-              <div className="flex items-center justify-center gap-2 mt-1.5 flex-wrap">
-                <span className="text-xs text-gray-500 font-medium">{user?.email || "Guest"}</span>
-                {user?.role === "admin" && (
+              <h5 className="inline font-bold text-gray-200 text-sm leading-tight">{user?.name || "User"}           </h5>
+              <span className="ml-2 h-1 w-1 bg-gray-500/20 rounded-full mx-auto my-1"></span>
+              {(user?.role === "admin" || user?.role === "member") && (
                   <span className="bg-orange-500/10 text-[#EA8D23] border border-orange-500/20 text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider whitespace-nowrap">
-                    Admin
+                    {user.role === "admin" ? "Admin" : "Member"}
                   </span>
                 )}
-              </div>
+              <span className="flex items-center justify-center gap-2 mt-1.5 flex-wrap">
+                <div className="text-xs text-gray-500 font-medium">{user?.email || "Guest"}</div>
+                
+              </span>
             </div>
           )}
         </div>

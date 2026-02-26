@@ -101,13 +101,16 @@ const AdminMessages = () => {
     const fileInputRef = useRef(null);
     const typingTimeoutRef = useRef(null);
     const chatOptionsRef = useRef(null);
+    const selectedConversationRef = useRef(null); // Track selected conversation for socket handlers
 
     const getConversationId = (conversation) => {
         if (!conversation) return null;
-        if (conversation.conversationId && conversation.conversationId !== conversation.participantId) {
+        // Prefer conversationId if available (backend's standard field)
+        if (conversation.conversationId) {
             return conversation.conversationId;
         }
-        if (conversation._id && conversation._id !== conversation.participantId) {
+        // Fallback to _id
+        if (conversation._id) {
             return conversation._id;
         }
         return null;
@@ -163,6 +166,11 @@ const AdminMessages = () => {
         scrollToBottom();
     }, [messages, isOtherUserTyping]);
 
+    // Keep selectedConversation ref in sync without triggering socket reconnect
+    useEffect(() => {
+        selectedConversationRef.current = selectedConversation;
+    }, [selectedConversation]);
+
     // Close context menu when clicking outside
     useEffect(() => {
         const handleClickOutside = () => setSelectedMessageId(null);
@@ -185,14 +193,40 @@ const AdminMessages = () => {
     useEffect(() => {
         if (!user || !user._id) return;
 
-        socket.connect();
+        // Initialize socket connection with retry logic
+        const initSocket = () => {
+            if (!socket.connected) {
+                try {
+                    socket.connect();
+                } catch (error) {
+                    console.error('Failed to connect socket:', error);
+                }
+            }
+        };
+
+        initSocket();
         socket.emit('join', user._id);
 
+        // Reconnect on disconnect
+        socket.on('disconnect', () => {
+            console.warn('Socket disconnected, attempting to reconnect...');
+            setTimeout(() => {
+                if (!socket.connected) {
+                    initSocket();
+                }
+            }, 2000);
+        });
+
+        socket.on('connect_error', (error) => {
+            console.error('Socket connection error:', error);
+        });
+
         socket.on('receiveMessage', (data) => {
+            const currentConversation = selectedConversationRef.current;
             // Check if this message belongs to the chat currently open
-            const isCurrentChat = selectedConversation &&
-                (data.conversationId === selectedConversation.conversationId ||
-                    data.senderId === selectedConversation.participantId);
+            const isCurrentChat = currentConversation &&
+                (data.conversationId === currentConversation.conversationId ||
+                    data.senderId === currentConversation.participantId);
 
             // Only add message to view if it's for the current conversation
             if (isCurrentChat) {
@@ -210,7 +244,7 @@ const AdminMessages = () => {
                 ]);
                 scrollToBottom();
                 setIsOtherUserTyping(false);
-                markAsRead(selectedConversation);
+                markAsRead(currentConversation);
             }
 
             // Always update the conversation list preview
@@ -233,7 +267,8 @@ const AdminMessages = () => {
         });
 
         socket.on('typing', (data) => {
-            if (selectedConversation && data.senderId === selectedConversation.participantId) {
+            const currentConversation = selectedConversationRef.current;
+            if (currentConversation && data.senderId === currentConversation.participantId) {
                 setIsOtherUserTyping(true);
                 if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
                 typingTimeoutRef.current = setTimeout(() => {
@@ -274,9 +309,18 @@ const AdminMessages = () => {
             socket.off('receiveMessage');
             socket.off('typing');
             socket.off('userStatusChanged');
-            socket.disconnect();
+            // Don't disconnect on cleanup - only disconnect on component unmount
         };
-    }, [user, selectedConversation, markAsRead]);
+    }, [user?._id, markAsRead]);
+
+    // Disconnect socket only on component unmount
+    useEffect(() => {
+        return () => {
+            if (socket.connected) {
+                socket.disconnect();
+            }
+        };
+    }, []);
 
     // --- Fetch Data Logic ---
     const fetchConversations = useCallback(async () => {
@@ -284,61 +328,71 @@ const AdminMessages = () => {
         try {
             setIsLoadingConversations(true);
             
-            // Fetch all team members/users
-            const response = await axiosInstance.get('/api/users/for-messaging');
-            
-            if (response.data && response.data.users && Array.isArray(response.data.users)) {
-                // Fetch existing conversations to get message history
-                const existingConversations = await MessagingService.getConversations(user._id);
-                
-                // Create a map of existing conversations for easy lookup
-                const conversationMap = {};
-                if (Array.isArray(existingConversations)) {
-                    existingConversations.forEach(conv => {
-                        const otherParticipant = conv.participants.find(p => p._id !== user._id) || conv.participants[0];
-                        conversationMap[otherParticipant._id] = {
-                            _id: conv._id,
-                            lastMessage: conv.lastMessage || 'Start a conversation...',
-                            timestamp: conv.lastMessageTime || new Date(),
-                            unread: getUnreadCountForUser(conv.unreadCounts, user._id)
-                        };
-                    });
+            // Try to fetch conversations from cache first
+            const cachedConversations = localStorage.getItem(`conversations_${user._id}`);
+            if (cachedConversations) {
+                try {
+                    const cached = JSON.parse(cachedConversations);
+                    setConversations(cached);
+                    console.log('Loaded conversations from cache');
+                } catch (e) {
+                    console.warn('Failed to parse cached conversations');
                 }
-                
-                // Map all users and merge with existing conversation data
-                const allMembers = response.data.users.map(u => {
-                    const existingConv = conversationMap[u._id];
+            }
+            
+            // Fetch conversations with participant details
+            const response = await axiosInstance.get(`/api/messages/conversations/${user._id}`);
+            
+            // The backend returns an array of conversations directly
+            const conversations = Array.isArray(response.data) ? response.data : [];
+            
+            if (conversations.length > 0) {
+                // Transform conversations to include participant details
+                const transformedConversations = conversations.map(conv => {
+                    // Find the other participant (not the current user)
+                    let otherParticipant = null;
+                    
+                    if (conv.participants && Array.isArray(conv.participants)) {
+                        otherParticipant = conv.participants.find(p => {
+                            if (!p || !p._id) return false;
+                            const participantId = p._id?.toString?.() || String(p._id);
+                            const currentUserId = user._id?.toString?.() || String(user._id);
+                            return participantId !== currentUserId;
+                        });
+                    }
+
                     return {
-                        _id: existingConv?._id || u._id,
-                        conversationId: existingConv?._id || u._id,
-                        participantId: u._id,
-                        participantName: u.name,
-                        participantEmail: u.email,
-                        participantImage: u.profileImageUrl,
-                        participantRole: u.role,
-                        participantStatus: u.status,
-                        participantIsOnline: u.isOnline,
-                        lastMessage: existingConv?.lastMessage || 'Start a conversation...',
-                        timestamp: existingConv?.timestamp || new Date(),
-                        unread: existingConv?.unread || 0
+                        _id: conv._id,
+                        conversationId: conv._id,
+                        participantId: otherParticipant?._id || '',
+                        participantName: otherParticipant?.name || 'Unknown User',
+                        participantEmail: otherParticipant?.email || 'No email',
+                        participantImage: otherParticipant?.profileImageUrl || '',
+                        participantRole: otherParticipant?.role || 'user',
+                        participantStatus: otherParticipant?.status || 'offline',
+                        participantIsOnline: otherParticipant?.isOnline || false,
+                        lastMessage: conv.lastMessage || 'Start a conversation...',
+                        timestamp: conv.lastMessageTime || new Date(),
+                        unread: 0,
+                        participants: conv.participants || []
                     };
                 });
                 
-                // Sort by timestamp (most recent first)
-                allMembers.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                setConversations(allMembers);
-            }
-        } catch (error) {
-            console.error('Failed to fetch conversations:', error);
-            try {
-                // Fallback: try to fetch users directly
-                const response = await axiosInstance.get('/api/users/for-messaging');
-                if (response.data && response.data.users) {
-                    setConversations(response.data.users.map(u => ({
+                transformedConversations.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                setConversations(transformedConversations);
+                
+                // Cache conversations
+                localStorage.setItem(`conversations_${user._id}`, JSON.stringify(transformedConversations));
+            } else {
+                // If no conversations found, fetch all users as initial list
+                const usersResponse = await axiosInstance.get('/api/users/for-messaging');
+                if (usersResponse.data && usersResponse.data.users && Array.isArray(usersResponse.data.users)) {
+                    const allMembers = usersResponse.data.users.map(u => ({
                         _id: u._id,
+                        conversationId: u._id,
                         participantId: u._id,
-                        participantName: u.name,
-                        participantEmail: u.email,
+                        participantName: u.name || 'Unknown User',
+                        participantEmail: u.email || 'No email',
                         participantImage: u.profileImageUrl,
                         participantRole: u.role,
                         participantStatus: u.status,
@@ -346,25 +400,101 @@ const AdminMessages = () => {
                         lastMessage: 'Start a conversation...',
                         timestamp: new Date(),
                         unread: 0
-                    })));
+                    }));
+                    
+                    allMembers.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                    setConversations(allMembers);
+                    
+                    // Cache conversations
+                    localStorage.setItem(`conversations_${user._id}`, JSON.stringify(allMembers));
                 }
-            } catch (fallbackError) {
-                console.error('Fallback fetch also failed:', fallbackError);
+            }
+        } catch (error) {
+            console.error('Failed to fetch conversations:', error);
+            
+            // Use cached conversations on error
+            const cachedConversations = localStorage.getItem(`conversations_${user._id}`);
+            if (cachedConversations) {
+                try {
+                    const cached = JSON.parse(cachedConversations);
+                    setConversations(cached);
+                    console.log('Loaded conversations from cache (fallback)');
+                    toast.info('Showing cached conversations');
+                } catch (e) {
+                    console.warn('Failed to parse cached conversations');
+                }
+            } else {
+                try {
+                    // Fallback: try to fetch users directly
+                    const response = await axiosInstance.get('/api/users/for-messaging');
+                    if (response.data && response.data.users) {
+                        const userList = response.data.users.map(u => ({
+                            _id: u._id,
+                            participantId: u._id,
+                            participantName: u.name || 'Unknown User',
+                            participantEmail: u.email || 'No email',
+                            participantImage: u.profileImageUrl,
+                            participantRole: u.role,
+                            participantStatus: u.status,
+                            participantIsOnline: u.isOnline,
+                            lastMessage: 'Start a conversation...',
+                            timestamp: new Date(),
+                            unread: 0
+                        }));
+                        setConversations(userList);
+                    }
+                } catch (fallbackError) {
+                    console.error('Fallback fetch also failed:', fallbackError);
+                    toast.error('Failed to load conversations');
+                }
             }
         } finally {
             setIsLoadingConversations(false);
         }
     }, [user]);
 
-    const fetchMessages = useCallback(async (conversationId) => {
+    const fetchMessages = useCallback(async (conversationId, retryCount = 0) => {
         if (!conversationId) return;
         try {
             setIsLoading(true);
             const messages = await MessagingService.getConversationMessages(conversationId);
-            setMessages(Array.isArray(messages) ? messages : []);
+            const messageArray = Array.isArray(messages) ? messages : [];
+            setMessages(messageArray);
+            
+            // Cache messages in localStorage for offline access
+            if (messageArray.length > 0) {
+                localStorage.setItem(
+                    `messages_${conversationId}`,
+                    JSON.stringify(messageArray)
+                );
+            }
         } catch (error) {
             console.error('Failed to fetch messages:', error);
-            setMessages([]);
+            
+            // Retry once on failure
+            if (retryCount < 1) {
+                console.log('Retrying message fetch...');
+                setTimeout(() => {
+                    fetchMessages(conversationId, retryCount + 1);
+                }, 1000);
+                return;
+            }
+            
+            // Try to load from cache on failure
+            const cachedMessages = localStorage.getItem(`messages_${conversationId}`);
+            if (cachedMessages) {
+                try {
+                    setMessages(JSON.parse(cachedMessages));
+                    console.log('Loaded messages from cache');
+                    toast.info('Showing cached messages (offline)');
+                } catch (parseError) {
+                    console.error('Failed to parse cached messages:', parseError);
+                    setMessages([]);
+                }
+            } else {
+                setMessages([]);
+                toast.error('Failed to load messages');
+            }
         } finally {
             setIsLoading(false);
         }

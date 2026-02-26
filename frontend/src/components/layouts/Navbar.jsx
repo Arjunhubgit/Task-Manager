@@ -373,14 +373,16 @@ const Navbar = ({ onMenuToggle, isMobileMenuOpen }) => {
                                 </button>
                             </div>
 
-                            {/* Profile & Settings */}
+                            {/* Profile */}
                             <div className="p-1">
                                 <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors text-left">
                                     <UserIcon className="w-4 h-4" /> Profile
                                 </button>
-                                <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors text-left">
-                                    <Settings className="w-4 h-4" /> Settings
-                                </button>
+                                {user?.role !== "admin" && (
+                                    <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors text-left">
+                                        <Settings className="w-4 h-4" /> Settings
+                                    </button>
+                                )}
                             </div>
 
                             {/* Sign Out */}

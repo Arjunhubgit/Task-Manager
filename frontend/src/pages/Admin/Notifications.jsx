@@ -190,8 +190,12 @@ const AdminNotifications = () => {
       );
 
       if (response.data.success) {
-        setNotifications(response.data.data || []);
-        const unread = response.data.data.filter((n) => !n.read).length;
+        // Filter out message-type notifications
+        const filteredNotifications = (response.data.data || []).filter(
+          (notification) => notification.type !== "message"
+        );
+        setNotifications(filteredNotifications);
+        const unread = filteredNotifications.filter((n) => !n.read).length;
         setUnreadCount(unread);
       }
     } catch (error) {

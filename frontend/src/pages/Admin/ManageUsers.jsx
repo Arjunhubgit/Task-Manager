@@ -101,15 +101,6 @@ const ManageUsers = () => {
     getAllUsers();
   }, []);
 
-  // Real-time polling for user status updates
-  useEffect(() => {
-    const pollInterval = setInterval(() => {
-      getAllUsers();
-    }, 3000); // Poll every 3 seconds
-
-    return () => clearInterval(pollInterval);
-  }, []);
-
   // --- Socket.io Real-time Status Updates ---
   useEffect(() => {
     socket.connect();

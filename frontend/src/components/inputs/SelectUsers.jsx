@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useContext } from "react";
 import axiosInstance from "../../utils/axiosInstance";
 import { API_PATHS } from "../../utils/apiPaths";
 import { LuUsers } from "react-icons/lu";
 import Modal from "../Modal";
 import AvatarGroup from "../AvatarGroup";
+import { UserContext } from "../../context/userContext";
 
 const SelectUsers = ({ selectedUsers, setSelectedUsers }) => {
+    const { user } = useContext(UserContext);
     const [allUsers, setAllUsers] = useState([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [tempSelectedUsers, setTempSelectedUsers] = useState([]);
@@ -34,9 +36,23 @@ const SelectUsers = ({ selectedUsers, setSelectedUsers }) => {
         setIsModalOpen(false);
     };
 
-    // 🛠️ FIX 1: Filter full User Objects instead of just strings
+    const selectableUsers = useMemo(() => {
+        const users = Array.isArray(allUsers) ? [...allUsers] : [];
+        if (user?._id && !users.some((item) => item._id === user._id)) {
+            users.unshift({
+                _id: user._id,
+                name: user.name || "You",
+                email: user.email || "",
+                profileImageUrl: user.profileImageUrl || "",
+                role: user.role || "admin",
+            });
+        }
+        return users;
+    }, [allUsers, user]);
+
+    // Filter full User Objects instead of just strings
     // This allows AvatarGroup to show the user's Name on hover
-    const selectedUserData = allUsers.filter((user) => selectedUsers.includes(user._id));
+    const selectedUserData = selectableUsers.filter((member) => (selectedUsers || []).includes(member._id));
 
     useEffect(() => {
         getAllUsers();
@@ -76,7 +92,7 @@ const SelectUsers = ({ selectedUsers, setSelectedUsers }) => {
                 title="Select Users"
             >
                 <div className="space-y-3 h-[60vh] overflow-y-auto pr-2 bg-gray-900 pb-4 custom-scrollbar">
-                    {allUsers.map((user) => (
+                    {selectableUsers.map((user) => (
                         <div
                             key={user._id}
                             className={`flex items-center gap-4 p-3 rounded-lg border transition-all duration-200 cursor-pointer group ${

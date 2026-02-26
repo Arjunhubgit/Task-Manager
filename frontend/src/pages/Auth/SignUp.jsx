@@ -140,49 +140,54 @@ const SignUp = () => {
       });
       updateUser(response.data);
       navigate(response.data.role === 'admin' ? '/admin/dashboard' : '/user/dashboard');
-    } catch (err) { 
-      const errorMessage = err.response?.data?.message || "Google Sign In failed. Please try again.";
-      setErrors(errorMessage);
+    } catch (err) {
+      let errorMessage = "Google Sign In failed. Please try again.";
+      if (err.response) {
+        errorMessage = err.response.data?.message || errorMessage;
+      } else if (err.request) {
+        errorMessage = "Network error: Unable to reach Google authentication server.";
+      }
+      setErrors(prev => ({ ...prev, google: errorMessage }));
     }
   };
 
   // 4. Main Registration Handler (FormData Image Upload)
   const handleSignUp = async (e) => {
     e.preventDefault();
-    
     // Validate all fields first
     if (!validateForm()) return;
-    
     setIsSubmitting(true);
     setErrors({});
-
     try {
       // Step A: Upload image binary via FormData
       const imgUploadRes = await uploadImage(profilePic);
-      
       // Step B: Construct final registration payload
       const payload = {
-        name: fullName, 
-        email, 
-        password, 
-        profileImageUrl: imgUploadRes.imageUrl, 
+        name: fullName,
+        email,
+        password,
+        profileImageUrl: imgUploadRes.imageUrl,
         role: signupMode === 'admin' ? 'admin' : 'member',
       };
-      
       if (signupMode === 'admin') {
         payload.organizationName = organizationName;
         payload.adminCode = adminCode;
       } else {
         payload.inviteCode = inviteCode || undefined;
       }
-      
       // Step C: Send registration request
       const response = await axiosInstance.post(API_PATHS.AUTH.REGISTER, payload);
       updateUser(response.data);
       navigate(response.data.role === 'admin' ? '/admin/dashboard' : '/user/dashboard');
-
-    } catch (err) { 
-      const backendMsg = err.response?.data?.message || "Registration failed.";
+    } catch (err) {
+      let backendMsg = "Registration failed.";
+      if (err.response) {
+        backendMsg = err.response.data?.message || backendMsg;
+      } else if (err.request) {
+        backendMsg = "Network error: Unable to reach registration server.";
+      } else {
+        backendMsg = "An unexpected error occurred. Please try again later.";
+      }
       if (backendMsg.toLowerCase().includes("email")) {
         setErrors({ email: "This email is already registered." });
       } else {

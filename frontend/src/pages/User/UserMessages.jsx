@@ -1,34 +1,35 @@
-import React, { useState, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useContext, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { useLocation } from 'react-router-dom';
 import socket from '../../services/socket';
 import {
     Search, Send, MoreVertical, Phone, Video, Info, Paperclip,
-    Smile, User as UserIcon, MessageSquare, Check, CheckCheck,
-    Bell, ChevronLeft, Trash2, Copy, Star, Reply, Flag, Sparkles
+    Smile, MessageSquare, Check, CheckCheck,
+    Bell, ChevronLeft, Trash2, Copy, Star, Reply, Flag
 } from 'lucide-react';
 import { UserContext } from '../../context/userContext';
 import axiosInstance from '../../utils/axiosInstance';
 import MessagingService from '../../services/messagingService';
 import toast from 'react-hot-toast';
-import DashboardLayout from '../../components/layouts/DashboardLayout';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getImageUrl } from '../../utils/helper';
+import Navbar from '../../components/layouts/Navbar';
+import Footer from '../../components/layouts/Footer';
 
-// --- SIMPLIFIED ANIMATION VARIANTS FOR PERFORMANCE ---
-// Removed staggerChildren and complex spring animations that cause jank
-const listItemVariants = {
+// --- Animation Variants ---
+const listContainerVariants = {
     hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { duration: 0.2 } }
+    visible: { opacity: 1, transition: { staggerChildren: 0.05, delayChildren: 0.1 } }
 };
 
-// Disabled message animations completely - spring animations with scale cause significant scrolling jank
+const listItemVariants = {
+    hidden: { x: -20, opacity: 0 },
+    visible: { x: 0, opacity: 1, transition: { type: 'spring', stiffness: 120 } }
+};
+
 const messageVariants = {
-    hidden: { opacity: 1 },
-    visible: { opacity: 1 }
+    hidden: { y: 10, opacity: 0, scale: 0.95 },
+    visible: { y: 0, opacity: 1, scale: 1, transition: { type: "spring", stiffness: 150, damping: 20 } }
 };
-
-const _FRAMER_MOTION_LOADED = Boolean(motion);
 
 // Helper function to format message timestamp
 const formatMessageDate = (timestamp) => {
@@ -80,7 +81,6 @@ const getUnreadCountForUser = (unreadCounts, userId) => {
 const UserMessages = () => {
     // --- State & Context ---
     const { user, notifications = [], markNotificationAsRead } = useContext(UserContext);
-    const location = useLocation();
     const [conversations, setConversations] = useState([]);
     const [selectedConversation, setSelectedConversation] = useState(null);
     const [messages, setMessages] = useState([]);
@@ -89,72 +89,76 @@ const UserMessages = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isLoadingConversations, setIsLoadingConversations] = useState(true);
     const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
-    const [showChatOptions, setShowChatOptions] = useState(false);
-    const [conversationPreferences, setConversationPreferences] = useState({});
-    const [selectedMessageId, setSelectedMessageId] = useState(null);
-    const [messageContextPos, setMessageContextPos] = useState({ x: 0, y: 0 });
-    const [starredMessages, setStarredMessages] = useState([]);
-    const [pinnedMessages, setPinnedMessages] = useState([]);
-    const [selectedMessages, setSelectedMessages] = useState([]);
-    const [replyingTo, setReplyingTo] = useState(null);
-    const [aiSummary, setAiSummary] = useState("");
-    const [aiActionItems, setAiActionItems] = useState([]);
-    const [aiReplySuggestions, setAiReplySuggestions] = useState([]);
-    const [isAiLoading, setIsAiLoading] = useState(false);
+    const [showChatOptions, setShowChatOptions] = useState(false); // Dropdown state
+    const [mutedConversations, setMutedConversations] = useState([]); // Track muted conversations
+    const [selectedMessageId, setSelectedMessageId] = useState(null); // For message context menu
+    const [messageContextPos, setMessageContextPos] = useState({ x: 0, y: 0 }); // Context menu position
+    const [starredMessages, setStarredMessages] = useState([]); // Track starred messages
+    const [replyingTo, setReplyingTo] = useState(null); // Reply to message
 
     // --- Refs ---
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
     const typingTimeoutRef = useRef(null);
     const chatOptionsRef = useRef(null);
+    const selectedConversationRef = useRef(null); // Track selected conversation for socket handlers
 
     const getConversationId = useCallback((conversation) => {
         if (!conversation) return null;
-        if (conversation.conversationId && conversation.conversationId !== conversation.participantId) {
-            return conversation.conversationId;
-        }
         if (conversation._id && conversation._id !== conversation.participantId) {
             return conversation._id;
         }
-        return null;
+        return conversation.conversationId || null;
     }, []);
 
-    const getConversationStorageKey = useCallback(
-        (conversation) => getConversationId(conversation) || conversation?.participantId || conversation?._id,
-        [getConversationId]
-    );
+    const getConversationStorageKey = useCallback((conversation) => {
+        return getConversationId(conversation) || conversation?.participantId || conversation?._id;
+    }, [getConversationId]);
 
-    const getPreferenceKey = useCallback(
-        (conversation) => getConversationId(conversation) || conversation?._id,
-        [getConversationId]
-    );
+    // --- localStorage Helper Functions ---
+    const saveConversationsToStorage = useCallback((convList) => {
+        try {
+            localStorage.setItem(
+                `conversations_${user?._id}`,
+                JSON.stringify(convList)
+            );
+        } catch (error) {
+            console.error('Failed to save conversations to localStorage:', error);
+        }
+    }, [user?._id]);
 
-    const selectedConversationKey = useMemo(
-        () => getPreferenceKey(selectedConversation),
-        [getPreferenceKey, selectedConversation]
-    );
+    const loadConversationsFromStorage = useCallback(() => {
+        try {
+            const cached = localStorage.getItem(`conversations_${user?._id}`);
+            return cached ? JSON.parse(cached) : null;
+        } catch (error) {
+            console.error('Failed to load conversations from localStorage:', error);
+            return null;
+        }
+    }, [user?._id]);
 
-    const markRelatedMessageNotificationsAsRead = useCallback(
-        (conversationId) => {
-            if (!conversationId || !Array.isArray(notifications) || typeof markNotificationAsRead !== 'function') return;
-            notifications.forEach((notification) => {
-                const relatedConversationId =
-                    notification?.relatedConversationId?._id || notification?.relatedConversationId;
-                if (
-                    notification &&
-                    notification.type === 'message' &&
-                    !notification.read &&
-                    relatedConversationId &&
-                    String(relatedConversationId) === String(conversationId)
-                ) {
-                    markNotificationAsRead(notification._id);
-                }
-            });
-        },
-        [notifications, markNotificationAsRead]
-    );
+    const saveMessagesToStorage = useCallback((conversationId, messageList) => {
+        try {
+            localStorage.setItem(
+                `messages_${conversationId}`,
+                JSON.stringify(messageList)
+            );
+        } catch (error) {
+            console.error('Failed to save messages to localStorage:', error);
+        }
+    }, []);
 
-    // --- Helpers ---
+    const loadMessagesFromStorage = useCallback((conversationId) => {
+        try {
+            const cached = localStorage.getItem(`messages_${conversationId}`);
+            return cached ? JSON.parse(cached) : null;
+        } catch (error) {
+            console.error('Failed to load messages from localStorage:', error);
+            return null;
+        }
+    }, []);
+
+    // Helper function to scroll to bottom
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
@@ -162,6 +166,11 @@ const UserMessages = () => {
     useEffect(() => {
         scrollToBottom();
     }, [messages, isOtherUserTyping]);
+
+    // Keep selectedConversation ref in sync without triggering socket reconnect
+    useEffect(() => {
+        selectedConversationRef.current = selectedConversation;
+    }, [selectedConversation]);
 
     // Close context menu when clicking outside
     useEffect(() => {
@@ -183,22 +192,43 @@ const UserMessages = () => {
 
     // --- Socket.io Logic ---
     useEffect(() => {
-        if (!user || !user._id) return;
+        if (!user?._id) return;
 
-        socket.connect();
+        // Only connect if not already connected
+        if (!socket.connected) {
+            socket.connect();
+        }
         socket.emit('join', user._id);
 
         socket.on('receiveMessage', (data) => {
-            const isCurrentChat = selectedConversation &&
-                (data.conversationId === selectedConversation.conversationId ||
-                    data.senderId === selectedConversation.participantId);
+            const currentConversation = selectedConversationRef.current;
+            const isCurrentChat = currentConversation &&
+                (data.conversationId === currentConversation._id ||
+                    data.senderId === currentConversation.participantId);
 
             if (isCurrentChat) {
-                setMessages(prev => [...prev, data]);
+                setMessages(prev => {
+                    const updatedMessages = [...prev, data];
+                    // Save updated messages to localStorage
+                    if (currentConversation) {
+                        const convId = getConversationId(currentConversation);
+                        if (convId) {
+                            try {
+                                localStorage.setItem(
+                                    `messages_${convId}`,
+                                    JSON.stringify(updatedMessages)
+                                );
+                            } catch (error) {
+                                console.error('Failed to save messages to localStorage:', error);
+                            }
+                        }
+                    }
+                    return updatedMessages;
+                });
             }
 
             setConversations((prev) => {
-                return prev.map((conv) => {
+                const updated = prev.map((conv) => {
                     if (conv._id === data.conversationId || conv.participantId === data.senderId) {
                         return {
                             ...conv,
@@ -208,11 +238,22 @@ const UserMessages = () => {
                     }
                     return conv;
                 });
+                // Save updated conversations to localStorage
+                try {
+                    localStorage.setItem(
+                        `conversations_${user._id}`,
+                        JSON.stringify(updated)
+                    );
+                } catch (error) {
+                    console.error('Failed to save conversations to localStorage:', error);
+                }
+                return updated;
             });
         });
 
         socket.on('typing', (data) => {
-            if (selectedConversation && data.senderId === selectedConversation.participantId) {
+            const currentConversation = selectedConversationRef.current;
+            if (currentConversation && data.senderId === currentConversation.participantId) {
                 setIsOtherUserTyping(true);
                 clearTimeout(typingTimeoutRef.current);
                 typingTimeoutRef.current = setTimeout(() => setIsOtherUserTyping(false), 3000);
@@ -223,14 +264,14 @@ const UserMessages = () => {
             setConversations((prev) => {
                 return prev.map(conv =>
                     conv.participantId === data.userId
-                        ? { ...conv, participantStatus: data.status, statusTimestamp: data.timestamp }
+                        ? { ...conv, participantStatus: data.status }
                         : conv
                 );
             });
 
             setSelectedConversation((prev) => {
                 if (prev && prev.participantId === data.userId) {
-                    return { ...prev, participantStatus: data.status, statusTimestamp: data.timestamp };
+                    return { ...prev, participantStatus: data.status };
                 }
                 return prev;
             });
@@ -240,127 +281,252 @@ const UserMessages = () => {
             socket.off('receiveMessage');
             socket.off('typing');
             socket.off('userStatusChanged');
-            socket.disconnect();
+            // Don't disconnect on cleanup - only disconnect on component unmount
         };
-    }, [user, selectedConversation]);
+    }, [user?._id, getConversationId]);
+
+    // Disconnect socket only on component unmount
+    useEffect(() => {
+        return () => {
+            if (socket.connected) {
+                socket.disconnect();
+            }
+        };
+    }, []);
 
     // --- Fetch Data Logic ---
     const fetchConversations = useCallback(async () => {
-        if (!user || !user._id) return;
+        if (!user?._id) return;
         try {
             setIsLoadingConversations(true);
-            const conversations = await MessagingService.getConversations(user._id);
+            // Use correct endpoint: /api/messages/conversations/:userId
+            const response = await axiosInstance.get(`/api/messages/conversations/${user._id}`);
+            
+            // The backend returns an array of conversations directly
+            const conversations = Array.isArray(response.data) ? response.data : [];
+            
+            if (conversations.length > 0) {
+                // Transform conversations to include participant details
+                const transformedConversations = conversations.map(conv => {
+                    // Find the other participant (not the current user)
+                    let otherParticipant = null;
+                    
+                    if (conv.participants && Array.isArray(conv.participants)) {
+                        otherParticipant = conv.participants.find(p => {
+                            if (!p || !p._id) return false;
+                            const participantId = p._id?.toString?.() || String(p._id);
+                            const currentUserId = user._id?.toString?.() || String(user._id);
+                            return participantId !== currentUserId;
+                        });
+                    }
 
-            if (Array.isArray(conversations) && conversations.length > 0) {
-                setConversations(conversations);
-                const prefs = {};
-                conversations.forEach((conv) => {
-                    const key = getPreferenceKey(conv);
-                    prefs[key] = conv.preferences || {};
+                    return {
+                        _id: conv._id,
+                        conversationId: conv._id,
+                        participantId: otherParticipant?._id || '',
+                        participantName: otherParticipant?.name || 'Unknown User',
+                        participantEmail: otherParticipant?.email || 'No email',
+                        participantImage: otherParticipant?.profileImageUrl || '',
+                        participantRole: otherParticipant?.role || 'user',
+                        participantStatus: otherParticipant?.status || 'offline',
+                        participantIsOnline: otherParticipant?.isOnline || false,
+                        lastMessage: conv.lastMessage || 'Start a conversation...',
+                        timestamp: conv.lastMessageTime || new Date(),
+                        unread: 0,
+                        preferences: conv.preferences || {},
+                        participants: conv.participants || [] // Keep original for reference
+                    };
                 });
-                setConversationPreferences(prefs);
+                
+                transformedConversations.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                setConversations(transformedConversations);
+                // Save to localStorage
+                saveConversationsToStorage(transformedConversations);
             } else {
-                setConversations([]);
+                // If no conversations found, fetch all users as initial list
+                try {
+                    const response = await axiosInstance.get('/api/users/for-messaging');
+                    if (response.data?.users) {
+                        const userList = response.data.users.map(u => ({
+                            _id: u._id,
+                            participantId: u._id,
+                            participantName: u.name || u.email || 'User',
+                            participantEmail: u.email || 'No email',
+                            participantImage: u.profileImageUrl || '',
+                            participantRole: u.role || 'user',
+                            participantStatus: u.status || 'offline',
+                            participantIsOnline: u.isOnline || false,
+                            lastMessage: 'Start a conversation...',
+                            timestamp: new Date(),
+                            unread: 0,
+                            preferences: {}
+                        }));
+                        setConversations(userList);
+                        saveConversationsToStorage(userList);
+                    }
+                } catch (fallbackError) {
+                    console.error('Fallback fetch also failed:', fallbackError);
+                    setConversations([]);
+                }
             }
         } catch (error) {
             console.error('Failed to fetch conversations:', error);
+            // Try loading from localStorage as fallback
+            const cachedConversations = loadConversationsFromStorage();
+            if (cachedConversations && cachedConversations.length > 0) {
+                setConversations(cachedConversations);
+            } else {
+                try {
+                    const response = await axiosInstance.get('/api/users/for-messaging');
+                    if (response.data?.users) {
+                        const userList = response.data.users.map(u => ({
+                            _id: u._id,
+                            participantId: u._id,
+                            participantName: u.name || u.email || 'User',
+                            participantEmail: u.email || 'No email',
+                            participantImage: u.profileImageUrl || '',
+                            participantRole: u.role || 'user',
+                            participantStatus: u.status || 'offline',
+                            participantIsOnline: u.isOnline || false,
+                            lastMessage: 'Start a conversation...',
+                            timestamp: new Date(),
+                            unread: 0,
+                            preferences: {}
+                        }));
+                        setConversations(userList);
+                        saveConversationsToStorage(userList);
+                    }
+                } catch (fallbackError) {
+                    console.error('Fallback fetch also failed:', fallbackError);
+                    setConversations([]);
+                }
+            }
         } finally {
             setIsLoadingConversations(false);
         }
-    }, [user, getPreferenceKey]);
+    }, [user, saveConversationsToStorage, loadConversationsFromStorage]);
 
     const fetchMessages = useCallback(async (conversationId) => {
         if (!conversationId) return;
         try {
             setIsLoading(true);
-            const messages = await MessagingService.getConversationMessages(conversationId);
-            setMessages(Array.isArray(messages) ? messages : []);
+            // Load cached messages first
+            const cachedMessages = loadMessagesFromStorage(conversationId);
+            if (cachedMessages && cachedMessages.length > 0) {
+                setMessages(cachedMessages);
+            }
+            
+            // Fetch fresh messages from server
+            const freshMessages = await MessagingService.getConversationMessages(conversationId);
+            const messagesToSet = Array.isArray(freshMessages) ? freshMessages : [];
+            setMessages(messagesToSet);
+            // Save to localStorage
+            saveMessagesToStorage(conversationId, messagesToSet);
         } catch (error) {
             console.error('Failed to fetch messages:', error);
-            setMessages([]);
+            // Try loading from localStorage as fallback
+            const cachedMessages = loadMessagesFromStorage(conversationId);
+            if (cachedMessages) {
+                setMessages(cachedMessages);
+            } else {
+                setMessages([]);
+            }
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [loadMessagesFromStorage, saveMessagesToStorage]);
 
     const markAsRead = useCallback(async (conv) => {
         const conversationId = getConversationId(conv);
         if (!conversationId) return;
         try {
-            setConversations(prev => prev.map(c =>
-                getConversationId(c) === conversationId ? { ...c, unread: 0 } : c
-            ));
-
+            setConversations(prev =>
+                prev.map(c => getConversationId(c) === conversationId ? { ...c, unread: 0 } : c)
+            );
             await axiosInstance.put(`/api/messages/read/${conversationId}`, {});
-            markRelatedMessageNotificationsAsRead(conversationId);
-            window.dispatchEvent(new CustomEvent("messages:unread-updated", {
-                detail: { conversationId }
-            }));
         } catch (error) {
-            console.error("Failed to mark read", error);
+            console.error("Failed to mark read:", error);
         }
-    }, [getConversationId, markRelatedMessageNotificationsAsRead]);
+    }, [getConversationId]);
 
-    useEffect(() => { fetchConversations(); }, [fetchConversations]);
+    // Load conversations from localStorage on initial mount
+    useEffect(() => {
+        if (!user?._id) return;
+        const cachedConversations = loadConversationsFromStorage();
+        if (cachedConversations && cachedConversations.length > 0) {
+            setConversations(cachedConversations);
+        }
+    }, [user?._id, loadConversationsFromStorage]);
 
     useEffect(() => {
-        const params = new URLSearchParams(location.search);
-        const conversationParam = params.get("conversation");
-        if (!conversationParam || conversations.length === 0) return;
-        const match = conversations.find(
-            (conversation) =>
-                conversation._id === conversationParam ||
-                conversation.conversationId === conversationParam
-        );
-        if (match) {
-            setSelectedConversation(match);
-        }
-    }, [location.search, conversations]);
+        fetchConversations();
+    }, [fetchConversations]);
 
     useEffect(() => {
         if (selectedConversation) {
             const conversationId = getConversationId(selectedConversation);
             if (conversationId) {
                 fetchMessages(conversationId);
+                markAsRead(selectedConversation);
+            } else {
+                setMessages([]);
             }
             setShowChatOptions(false);
-            const prefKey = getPreferenceKey(selectedConversation);
-            const prefs = conversationPreferences[prefKey] || {};
-            setStarredMessages(prefs.starredMessageIds || []);
-            setPinnedMessages(prefs.pinnedMessageIds || []);
-            setSelectedMessages(prefs.selectedMessageIds || []);
         }
-    }, [selectedConversation, fetchMessages, getPreferenceKey, conversationPreferences, markAsRead, getConversationId]);
+    }, [selectedConversation, fetchMessages, markAsRead, getConversationId]);
 
     // --- Mute/Unmute Chat ---
     const handleMuteChat = async () => {
         if (!selectedConversation) return;
 
         try {
-            const conversationKey = getPreferenceKey(selectedConversation);
-            const current = conversationPreferences[conversationKey] || {};
-            const isMuted = current.muted || false;
+            const conversationKey = getConversationStorageKey(selectedConversation);
+            const isMuted = mutedConversations.includes(conversationKey);
 
-            const response = await MessagingService.updateConversationPreferences(conversationKey, {
-                [isMuted ? 'unmute' : 'mute']: true
-            });
-
-            setConversationPreferences(prev => ({
-                ...prev,
-                [conversationKey]: { ...current, muted: !isMuted }
-            }));
-        } catch {
-            toast.error("Failed to update chat preferences");
+            if (isMuted) {
+                setMutedConversations(prev => prev.filter(id => id !== conversationKey));
+                const saved = JSON.parse(localStorage.getItem('mutedConversations') || '[]');
+                const updated = saved.filter(id => id !== conversationKey);
+                localStorage.setItem('mutedConversations', JSON.stringify(updated));
+                toast.success("Notifications enabled");
+            } else {
+                setMutedConversations(prev => [...prev, conversationKey]);
+                const saved = JSON.parse(localStorage.getItem('mutedConversations') || '[]');
+                localStorage.setItem('mutedConversations', JSON.stringify([...saved, conversationKey]));
+                toast.success("Chat muted - notifications disabled");
+            }
+            setShowChatOptions(false);
+        } catch (error) {
+            toast.error("Failed to update mute status");
         }
     };
+
+    // Load muted conversations from localStorage on mount
+    useEffect(() => {
+        const saved = JSON.parse(localStorage.getItem('mutedConversations') || '[]');
+        setMutedConversations(saved);
+        const starred = JSON.parse(localStorage.getItem('starredMessages') || '[]');
+        setStarredMessages(starred);
+    }, []);
 
     // Message Actions
     const handleDeleteMessage = async (messageId) => {
         try {
             await axiosInstance.delete(`/api/messages/${messageId}`);
-            setMessages(prev => prev.filter(m => m._id !== messageId));
+            setMessages(prev => {
+                const updated = prev.filter(m => m._id !== messageId);
+                // Save updated messages to localStorage
+                if (selectedConversation) {
+                    const conversationId = getConversationId(selectedConversation);
+                    if (conversationId) {
+                        saveMessagesToStorage(conversationId, updated);
+                    }
+                }
+                return updated;
+            });
             toast.success("Message deleted");
-        } catch {
+            setSelectedMessageId(null);
+        } catch (error) {
             toast.error("Failed to delete message");
         }
     };
@@ -372,19 +538,17 @@ const UserMessages = () => {
     };
 
     const handleStarMessage = (messageId) => {
-        if (!selectedConversation) return;
-        const conversationKey = getPreferenceKey(selectedConversation);
-        const alreadyStarred = starredMessages.includes(messageId);
-        MessagingService.updateConversationPreferences(conversationKey, {
-            ...(alreadyStarred ? { unstarMessageId: messageId } : { starMessageId: messageId }),
-        })
-            .then((response) => {
-                const result = alreadyStarred
-                    ? starredMessages.filter(id => id !== messageId)
-                    : [...starredMessages, messageId];
-                setStarredMessages(result);
-            })
-            .catch(() => toast.error("Failed to update starred messages"));
+        if (starredMessages.includes(messageId)) {
+            const updated = starredMessages.filter(id => id !== messageId);
+            setStarredMessages(updated);
+            localStorage.setItem('starredMessages', JSON.stringify(updated));
+            toast.success("Unstarred");
+        } else {
+            const updated = [...starredMessages, messageId];
+            setStarredMessages(updated);
+            localStorage.setItem('starredMessages', JSON.stringify(updated));
+            toast.success("Starred");
+        }
         setSelectedMessageId(null);
     };
 
@@ -395,64 +559,21 @@ const UserMessages = () => {
     };
 
     const handleForwardMessage = (msg) => {
-        const query = window.prompt("Forward to teammate (name contains):");
-        if (!query || !query.trim()) return;
-        const targetConversation = conversations.find((conversation) =>
-            conversation.participantName.toLowerCase().includes(query.toLowerCase()) &&
-            conversation._id !== selectedConversation?._id
-        );
-        if (!targetConversation) {
-            toast.error("Teammate not found");
-            return;
-        }
-
-        const payload = {
-            recipientId: targetConversation.participantId,
-            content: `[Forwarded] ${msg.content}`,
-            conversationId: getConversationId(targetConversation),
-        };
-        axiosInstance
-            .post('/api/messages/send', payload)
-            .then(() => toast.success(`Forwarded to ${targetConversation.participantName}`))
-            .catch(() => toast.error("Failed to forward message"));
         setSelectedMessageId(null);
+        toast.info("Forward feature coming soon");
     };
 
     const handlePinMessage = (msg) => {
-        if (!selectedConversation) return;
-        const conversationKey = getPreferenceKey(selectedConversation);
-        const isPinned = pinnedMessages.includes(msg._id);
-        MessagingService.updateConversationPreferences(conversationKey, {
-            ...(isPinned ? { unpinMessageId: msg._id } : { pinMessageId: msg._id }),
-        })
-            .then((response) => {
-                const result = isPinned
-                    ? pinnedMessages.filter(id => id !== msg._id)
-                    : [...pinnedMessages, msg._id];
-                setPinnedMessages(result);
-            })
-            .catch(() => toast.error("Failed to pin message"));
         setSelectedMessageId(null);
+        toast.info("Pin feature coming soon");
     };
 
     const handleSelectMessage = (msgId) => {
-        if (!selectedConversation) return;
-        const conversationKey = getPreferenceKey(selectedConversation);
-        const isSelected = selectedMessages.includes(msgId);
-        MessagingService.updateConversationPreferences(conversationKey, {
-            ...(isSelected ? { unselectMessageId: msgId } : { selectMessageId: msgId }),
-        })
-            .then((response) => {
-                const result = isSelected
-                    ? selectedMessages.filter(id => id !== msgId)
-                    : [...selectedMessages, msgId];
-                setSelectedMessages(result);
-            })
-            .catch(() => toast.error("Failed to update message selection"));
         setSelectedMessageId(null);
+        toast.info("Selection feature coming soon");
     };
 
-    const handleReportMessage = () => {
+    const handleReportMessage = (msg) => {
         setSelectedMessageId(null);
         toast.success("Message reported");
     };
@@ -542,44 +663,58 @@ const UserMessages = () => {
             timestamp: new Date()
         });
 
-        setMessages(prev => [...prev, {
-            _id: response.data._id || Date.now().toString(),
-            senderId: user._id,
-            recipientId: selectedConversation.participantId,
-            content,
-            read: false,
-            timestamp: new Date()
-        }]);
+        setMessages(prev => {
+            const updatedMessages = [...prev, {
+                _id: response.data._id || Date.now().toString(),
+                senderId: user._id,
+                recipientId: selectedConversation.participantId,
+                content,
+                read: false,
+                timestamp: new Date()
+            }];
+            // Save messages to localStorage
+            saveMessagesToStorage(resolvedConversationId, updatedMessages);
+            return updatedMessages;
+        });
 
         setConversations(prev => {
-            const index = prev.findIndex(c => getConversationStorageKey(c) === getConversationStorageKey(selectedConversation));
-            if (index !== -1) {
-                const updated = [...prev];
-                updated[index] = {
-                    ...updated[index],
-                    lastMessage: content,
-                    timestamp: new Date()
-                };
-                return updated;
-            }
-            return prev;
+            const activeKey = getConversationStorageKey(selectedConversation);
+            const updated = prev.map((conv) =>
+                getConversationStorageKey(conv) === activeKey
+                    ? {
+                        ...conv,
+                        _id: resolvedConversationId || conv._id,
+                        conversationId: resolvedConversationId || conv.conversationId,
+                        lastMessage: content,
+                        timestamp: new Date()
+                    }
+                    : conv
+            );
+            const sorted = updated.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            // Save conversations to localStorage
+            saveConversationsToStorage(sorted);
+            return sorted;
         });
 
         scrollToBottom();
-    }, [selectedConversation, user, getConversationStorageKey, getConversationId]);
+    }, [selectedConversation, user, getConversationStorageKey, getConversationId, saveMessagesToStorage, saveConversationsToStorage]);
 
     const handleStartCall = useCallback(async (isVideoCall = false) => {
         if (!selectedConversation) return;
 
         const callType = isVideoCall ? "Video" : "Audio";
-        const meetingLink = buildJitsiMeetingLink(isVideoCall);
 
         try {
-            await sendMessageWithContent(`${callType} call: ${meetingLink}`);
-            window.open(meetingLink, '_blank');
+            const callLink = buildJitsiMeetingLink(isVideoCall);
+            const callWindow = window.open(callLink, "_blank", "noopener,noreferrer");
+            if (!callWindow) {
+                toast.error("Popup blocked. Please allow popups to start the call.");
+            }
+            await sendMessageWithContent(`${callType} meeting link: ${callLink}`);
+            toast.success(`${callType} meeting link sent in chat.`);
         } catch (error) {
-            console.error('Failed to start call:', error);
-            toast.error(`Failed to start ${callType} call`);
+            console.error(`Failed to start ${callType.toLowerCase()} call:`, error);
+            toast.error(`Failed to start ${callType.toLowerCase()} meeting`);
         }
     }, [buildJitsiMeetingLink, selectedConversation, sendMessageWithContent]);
 
@@ -588,33 +723,44 @@ const UserMessages = () => {
         if (!messageText.trim()) return;
 
         try {
-            let contentToSend = messageText;
-            if (replyingTo) {
-                contentToSend = `[Reply to: ${replyingTo.content}]\n${messageText}`;
-            }
-
-            await sendMessageWithContent(contentToSend);
+            await sendMessageWithContent(messageText);
             setMessageText('');
-            setReplyingTo(null);
         } catch (error) {
-            console.error('Error sending message:', error);
+            console.error('Failed to send message:', error);
             toast.error('Failed to send message');
         }
-    }, [messageText, replyingTo, sendMessageWithContent]);
+    }, [messageText, sendMessageWithContent]);
 
     const handleClearChat = async () => {
         if (!selectedConversation) return;
         if (!window.confirm("Are you sure? This deletes all messages.")) return;
 
         try {
-            const conversationId = getConversationId(selectedConversation);
-            if (conversationId) {
-                await axiosInstance.delete(`/api/messages/conversation/${conversationId}`);
-                setMessages([]);
-                toast.success("Chat cleared");
+            const targetId = getConversationId(selectedConversation);
+            if (!targetId) {
                 setShowChatOptions(false);
+                toast("No chat history to clear yet.");
+                return;
             }
-        } catch {
+
+            await axiosInstance.delete(`/api/messages/clear/${targetId}`);
+            setMessages([]);
+            // Clear from localStorage
+            localStorage.removeItem(`messages_${targetId}`);
+            
+            setConversations((prev) => {
+                const updated = prev.map((conv) =>
+                    getConversationStorageKey(conv) === getConversationStorageKey(selectedConversation)
+                        ? { ...conv, lastMessage: 'Start a conversation...' }
+                        : conv
+                );
+                // Save updated conversations to localStorage
+                saveConversationsToStorage(updated);
+                return updated;
+            });
+            setShowChatOptions(false);
+            toast.success("Chat cleared");
+        } catch (error) {
             toast.error("Failed to clear chat");
         }
     };
@@ -622,58 +768,24 @@ const UserMessages = () => {
     const handleTyping = (e) => {
         setMessageText(e.target.value);
         if (selectedConversation) {
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
             socket.emit('typing', {
                 senderId: user._id,
-                recipientId: selectedConversation.participantId,
-                conversationId: getConversationId(selectedConversation)
+                recipientId: selectedConversation.participantId
             });
-        }
-    };
-
-    const handleSummarizeConversation = async () => {
-        if (!selectedConversation) return;
-        try {
-            setIsAiLoading(true);
-            const response = await axiosInstance.post('/api/messages/summarize', {
-                conversationId: getConversationId(selectedConversation),
-                messages: messages.map(m => ({ content: m.content, senderId: m.senderId }))
-            });
-            setAiSummary(response.data.summary);
-        } catch {
-            toast.error("Failed to summarize conversation");
-        } finally {
-            setIsAiLoading(false);
-        }
-    };
-
-    const handleGenerateReplySuggestions = async (tone = "professional") => {
-        if (!selectedConversation) return;
-        try {
-            setIsAiLoading(true);
-            const response = await axiosInstance.post('/api/messages/reply-suggestions', {
-                conversationId: getConversationId(selectedConversation),
-                tone,
-                messages: messages.map(m => ({ content: m.content, senderId: m.senderId }))
-            });
-            setAiReplySuggestions(response.data.suggestions || []);
-        } catch {
-            toast.error("Failed to generate suggestions");
-        } finally {
-            setIsAiLoading(false);
+            typingTimeoutRef.current = setTimeout(() => { }, 1000);
         }
     };
 
     const filteredConversations = conversations.filter(conv =>
-        (conv?.participantName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (conv?.participantEmail || '').toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    const isSelectedConversationMuted = Boolean(
-        selectedConversationKey && conversationPreferences[selectedConversationKey]?.muted
+        conv.participantName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        conv.participantEmail.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     return (
-        <DashboardLayout activeMenu="Messages">
-            <div className="flex h-[calc(100vh-7rem)] sm:h-[calc(100vh-7.5rem)] bg-gradient-to-br from-[#070c14] via-[#0b1421] to-[#060b12] rounded-lg sm:rounded-2xl md:rounded-[20px] border border-white/10 overflow-hidden shadow-[0_24px_80px_rgba(3,7,18,0.55)] relative">
+        <>
+            <Navbar />
+            <div className="flex h-[calc(100vh-120)] sm:h-[calc(100vh-100)] md:h-[calc(99vh-100px)] bg-gradient-to-br from-[#070c14] via-[#0b1421] to-[#060b12] rounded-lg sm:rounded-2xl md:rounded-[20px] border border-white/10 overflow-hidden shadow-[0_24px_80px_rgba(3,7,18,0.55)] relative">
 
                 {/* --- LEFT SIDEBAR --- */}
                 <div className={`w-full sm:w-72 md:w-80 lg:w-96 border-r border-white/10 flex-col bg-gradient-to-b from-[#0f1724]/95 via-[#0d1420]/95 to-[#0b111b]/95 backdrop-blur-2xl ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
@@ -696,7 +808,7 @@ const UserMessages = () => {
                         </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto custom-scrollbar p-2 sm:p-3 space-y-1.5 sm:space-y-2 bg-gradient-to-b from-transparent to-black/10">
+                    <motion.div variants={listContainerVariants} initial="visible" animate="visible" className="flex-1 overflow-y-auto custom-scrollbar p-2 sm:p-3 space-y-1.5 sm:space-y-2 bg-gradient-to-b from-transparent to-black/10">
                         {isLoadingConversations ? (
                             <div className="flex flex-col items-center justify-center h-40 space-y-3">
                                 <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
@@ -704,8 +816,9 @@ const UserMessages = () => {
                             </div>
                         ) : filteredConversations.length > 0 ? (
                             filteredConversations.map((conv) => (
-                                <button
+                                <motion.button
                                     key={conv._id}
+                                    variants={listItemVariants}
                                     onClick={() => {
                                         setSelectedConversation(conv);
                                         if (conv.unread > 0) markAsRead(conv);
@@ -720,15 +833,27 @@ const UserMessages = () => {
                                             <img src={getImageUrl(conv.participantImage)} alt={conv.participantName} className="w-10 sm:w-12 h-10 sm:h-12 rounded-full object-cover border border-white/20" />
                                         ) : (
                                             <div className="w-10 sm:w-12 h-10 sm:h-12 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border border-white/15 flex items-center justify-center text-slate-100 font-bold text-sm sm:text-base">
-                                                {(conv?.participantName || '').charAt(0)}
+                                                {conv.participantName.charAt(0)}
                                             </div>
                                         )}
-                                        <div className={`absolute bottom-0 right-0 z-20 rounded-full border-2 border-[#0f1724] flex items-center justify-center w-3.5 h-3.5 transition-all duration-200 ${getStatusColor(conv.participantStatus || 'offline')}`} title={getStatusLabel(conv.participantStatus || 'offline')} />
-                                        {conv.unread > 0 && (
-                                            <span className="absolute -top-1 -right-1 w-5 h-5 bg-orange-500 rounded-full text-white text-[10px] flex items-center justify-center font-bold shadow-lg border border-[#101826]">
-                                                {conv.unread}
-                                            </span>
-                                        )}
+                                        <div className={`
+                                            absolute bottom-0 right-0 z-20 rounded-full border-2 border-[#0f1724]
+                                            flex items-center justify-center w-3.5 h-3.5 transition-all duration-200
+                                            ${getStatusColor(conv.participantStatus || 'offline')}
+                                        `} title={getStatusLabel(conv.participantStatus || 'offline')} />
+
+                                        <AnimatePresence>
+                                            {conv.unread > 0 && (
+                                                <motion.span
+                                                    initial={{ scale: 0 }}
+                                                    animate={{ scale: 1 }}
+                                                    exit={{ scale: 0 }}
+                                                    className="absolute -top-1 -right-1 w-5 h-5 bg-orange-500 rounded-full text-white text-[10px] flex items-center justify-center font-bold shadow-lg border border-[#101826]"
+                                                >
+                                                    {conv.unread}
+                                                </motion.span>
+                                            )}
+                                        </AnimatePresence>
                                     </div>
 
                                     <div className="flex-1 text-left min-w-0">
@@ -745,9 +870,9 @@ const UserMessages = () => {
                                         </p>
                                     </div>
                                     {selectedConversation?._id === conv._id && (
-                                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-orange-500 rounded-r-full shadow-[0_0_10px_rgba(249,115,22,0.5)]" />
+                                        <motion.div layoutId="active-bar" className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-orange-500 rounded-r-full shadow-[0_0_10px_rgba(249,115,22,0.5)]" />
                                     )}
-                                </button>
+                                </motion.button>
                             ))
                         ) : (
                             <div className="flex flex-col items-center justify-center h-full text-gray-500 opacity-50">
@@ -755,7 +880,7 @@ const UserMessages = () => {
                                 <p className="text-xs">No conversations found</p>
                             </div>
                         )}
-                    </div>
+                    </motion.div>
                 </div>
 
                 {/* --- RIGHT CHAT AREA --- */}
@@ -774,13 +899,17 @@ const UserMessages = () => {
                                             <img src={getImageUrl(selectedConversation.participantImage)} alt={selectedConversation.participantName} className="w-8 sm:w-10 h-8 sm:h-10 rounded-full object-cover border border-white/10" />
                                         ) : (
                                             <div className="w-8 sm:w-10 h-8 sm:h-10 rounded-full bg-gray-800 flex items-center justify-center text-white font-bold border border-white/10 text-xs sm:text-sm">
-                                                {(selectedConversation?.participantName || '').charAt(0)}
+                                                {selectedConversation.participantName.charAt(0)}
                                             </div>
                                         )}
-                                        <div className={`absolute bottom-0 right-0 z-20 rounded-full border-2 border-[#0a0a0a] flex items-center justify-center w-3 h-3 transition-all duration-200 ${getStatusColor(selectedConversation.participantStatus || 'offline')}`} title={getStatusLabel(selectedConversation.participantStatus || 'offline')} />
+                                        <div className={`
+                                            absolute bottom-0 right-0 z-20 rounded-full border-2 border-[#0a0a0a]
+                                            flex items-center justify-center w-3 h-3 transition-all duration-200
+                                            ${getStatusColor(selectedConversation.participantStatus || 'offline')}
+                                        `} title={getStatusLabel(selectedConversation.participantStatus || 'offline')} />
                                     </div>
                                     <div>
-                                        <h3 className="text-xs sm:text-sm font-bold text-white tracking-wide truncate">{selectedConversation?.participantName}</h3>
+                                        <h3 className="text-xs sm:text-sm font-bold text-white tracking-wide truncate">{selectedConversation.participantName}</h3>
                                         <div className="flex items-center gap-1.5">
                                             <span className={`w-1 sm:w-1.5 h-1 sm:h-1.5 rounded-full ${selectedConversation.participantStatus === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-gray-600'}`}></span>
                                             <p className={`text-[9px] sm:text-[11px] font-medium tracking-wide ${selectedConversation.participantStatus === 'online' ? 'text-emerald-400' : 'text-gray-400'}`}>
@@ -807,7 +936,11 @@ const UserMessages = () => {
                                     <div className="hidden sm:block w-px h-5 md:h-6 bg-white/10 mx-1 md:mx-2"></div>
 
                                     {/* --- DROPDOWN MENU --- */}
-                                    <div className="relative z-50" ref={chatOptionsRef} onClick={(e) => e.stopPropagation()}>
+                                    <div
+                                        className="relative z-50"
+                                        ref={chatOptionsRef}
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
@@ -820,161 +953,102 @@ const UserMessages = () => {
                                         >
                                             <Info className="w-3.5 md:w-4 h-3.5 md:h-4" />
                                         </button>
-                                        {showChatOptions && (
-                                            <div className="absolute right-0 top-full mt-2 w-48 sm:w-56 bg-[#121212] border border-white/10 rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden z-50 origin-top-right">
-                                                <div className="p-1 sm:p-1.5 space-y-0.5 sm:space-y-1">
-                                                    <div className="px-2 sm:px-3 py-1.5 sm:py-2 text-[9px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider">Chat Settings</div>
-                                                    <button
-                                                        onClick={handleClearChat}
-                                                        className="w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2.5 text-xs sm:text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg sm:rounded-xl transition-colors group"
-                                                    >
-                                                        <div className="p-1 sm:p-1.5 bg-red-500/10 rounded-lg group-hover:bg-red-500/20 transition-colors flex-shrink-0">
-                                                            <Trash2 className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
-                                                        </div>
-                                                        <div className="flex flex-col items-start">
-                                                            <span className="truncate">Clear Chat</span>
-                                                            <span className="text-[8px] sm:text-[10px] text-red-400/60 font-normal">Delete all messages</span>
-                                                        </div>
-                                                    </button>
-                                                    <button
-                                                        onClick={handleMuteChat}
-                                                        className={`w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2.5 text-xs sm:text-sm font-medium rounded-lg sm:rounded-xl transition-colors group ${isSelectedConversationMuted
-                                                            ? 'text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10'
-                                                            : 'text-gray-300 hover:text-white hover:bg-white/5'
-                                                        }`}
-                                                    >
-                                                        <div className={`p-1 sm:p-1.5 rounded-lg transition-colors flex-shrink-0 ${isSelectedConversationMuted
-                                                            ? 'bg-yellow-500/20'
-                                                            : 'bg-white/5 group-hover:bg-white/10'
-                                                        }`}>
-                                                            <Bell className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
-                                                        </div>
-                                                        <div className="flex flex-col items-start min-w-0">
-                                                            <span className="truncate">{isSelectedConversationMuted ? 'Unmute' : 'Mute'}</span>
-                                                            <span className="text-[8px] sm:text-[10px] text-gray-500 font-normal truncate">{isSelectedConversationMuted ? 'Notifications enabled' : 'Stop notifications'}</span>
-                                                        </div>
-                                                    </button>
-                                                    <div className="h-px bg-white/5 my-1"></div>
-                                                    <button
-                                                        onClick={handleSummarizeConversation}
-                                                        className="w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2.5 text-xs sm:text-sm font-medium text-cyan-300 hover:text-cyan-200 hover:bg-cyan-500/10 rounded-lg sm:rounded-xl transition-colors group"
-                                                    >
-                                                        <div className="p-1 sm:p-1.5 bg-cyan-500/20 rounded-lg">
-                                                            <Sparkles className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
-                                                        </div>
-                                                        <span>Summarize</span>
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleGenerateReplySuggestions("professional")}
-                                                        className="w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2.5 text-xs sm:text-sm font-medium text-violet-300 hover:text-violet-200 hover:bg-violet-500/10 rounded-lg sm:rounded-xl transition-colors group"
-                                                    >
-                                                        <div className="p-1 sm:p-1.5 bg-violet-500/20 rounded-lg">
-                                                            <Sparkles className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
-                                                        </div>
-                                                        <span>Suggestions</span>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
+                                        <AnimatePresence>
+                                            {showChatOptions && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                    className="absolute right-0 top-full mt-2 w-48 sm:w-56 bg-[#121212] border border-white/10 rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden z-50 origin-top-right"
+                                                >
+                                                    <div className="p-1 sm:p-1.5 space-y-0.5 sm:space-y-1">
+                                                        <div className="px-2 sm:px-3 py-1.5 sm:py-2 text-[9px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider">Chat Settings</div>
+                                                        <button
+                                                            onClick={handleClearChat}
+                                                            className="w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2.5 text-xs sm:text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg sm:rounded-xl transition-colors group"
+                                                        >
+                                                            <div className="p-1 sm:p-1.5 bg-red-500/10 rounded-lg group-hover:bg-red-500/20 transition-colors flex-shrink-0">
+                                                                <Trash2 className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+                                                            </div>
+                                                            <div className="flex flex-col items-start">
+                                                                <span className="truncate">Clear Chat</span>
+                                                                <span className="text-[8px] sm:text-[10px] text-red-400/60 font-normal">Delete all messages</span>
+                                                            </div>
+                                                        </button>
+                                                        <button
+                                                            onClick={handleMuteChat}
+                                                            className={`w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2.5 text-xs sm:text-sm font-medium rounded-lg sm:rounded-xl transition-colors group ${mutedConversations.includes(getConversationStorageKey(selectedConversation))
+                                                                ? 'text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10'
+                                                                : 'text-gray-300 hover:text-white hover:bg-white/5'
+                                                            }`}
+                                                        >
+                                                            <div className={`p-1 sm:p-1.5 rounded-lg transition-colors flex-shrink-0 ${mutedConversations.includes(getConversationStorageKey(selectedConversation))
+                                                                ? 'bg-yellow-500/20'
+                                                                : 'bg-white/5 group-hover:bg-white/10'
+                                                            }`}>
+                                                                <Bell className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+                                                            </div>
+                                                            <div className="flex flex-col items-start min-w-0">
+                                                                <span className="truncate">{mutedConversations.includes(getConversationStorageKey(selectedConversation)) ? 'Unmute' : 'Mute'}</span>
+                                                                <span className="text-[8px] sm:text-[10px] text-gray-500 font-normal truncate">{mutedConversations.includes(getConversationStorageKey(selectedConversation)) ? 'Notifications enabled' : 'Stop notifications'}</span>
+                                                            </div>
+                                                        </button>
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
                                     </div>
                                 </div>
                             </div>
 
-                            {(aiSummary || aiReplySuggestions.length > 0 || aiActionItems.length > 0 || isAiLoading) && (
-                                <div className="px-3 sm:px-6 py-3 border-b border-white/10 bg-[#0c0c0c]/80">
-                                    <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-3">
-                                        <div className="flex items-center justify-between gap-2">
-                                            <p className="text-sm font-semibold text-violet-200 flex items-center gap-2">
-                                                <Sparkles className="w-4 h-4" />
-                                                AI Assistant
-                                            </p>
-                                            {isAiLoading && <span className="text-xs text-violet-300">Generating...</span>}
-                                        </div>
-                                        {aiSummary && <p className="text-xs text-gray-200 mt-2">{aiSummary}</p>}
-                                        {aiReplySuggestions.length > 0 && (
-                                            <div className="mt-2 flex flex-wrap gap-2">
-                                                {aiReplySuggestions.map((suggestion, idx) => (
-                                                    <button
-                                                        key={`${suggestion}-${idx}`}
-                                                        className="text-xs px-2 py-1 rounded-lg border border-cyan-500/30 bg-cyan-500/10 text-cyan-200 text-left"
-                                                        onClick={() => setMessageText(suggestion)}
-                                                    >
-                                                        {suggestion}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
                             {/* Messages List Area */}
                             <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 custom-scrollbar relative z-0" style={{
                                 backgroundColor: '#050505',
-                                backgroundImage: `linear-gradient(135deg, rgba(0, 0, 0, 0.4) 75%, rgba(15, 15, 15, 0.92) 100%)`
+                                backgroundImage: `linear-gradient(135deg, rgba(0, 0, 0, 0.6) 75%, rgba(15, 15, 15, 0.92) 100%), url(${new URL('../../assets/svg/chatbg.png', import.meta.url).href})`,
+                                backgroundSize: 'cover',
+                                backgroundAttachment: 'fixed',
+                                backgroundPosition: 'center',
+                                backgroundRepeat: 'no-repeat'
                             }}>
-                                {isLoading ? (
-                                    <div className="h-full flex items-center justify-center">
-                                        <p className="text-sm text-slate-400">Loading conversation...</p>
-                                    </div>
-                                ) : (
-                                    <>
-                                        {messages.map((msg, idx) => {
-                                            const senderId = typeof msg.senderId === 'object' ? msg.senderId._id : msg.senderId;
-                                            const isMe = senderId === user._id;
+                                <AnimatePresence initial={false}>
+                                    {messages.map((msg, idx) => {
+                                        const senderId = typeof msg.senderId === 'object' ? msg.senderId._id : msg.senderId;
+                                        const isMe = senderId === user._id;
 
-                                            return (
-                                                <div key={msg._id || idx} className={`flex w-full ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                                    <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[90%] sm:max-w-[85%] md:max-w-[75%] group`}>
-                                                        <div
-                                                            onContextMenu={(e) => handleShowContextMenu(e, msg._id)}
-                                                            onClick={() => setSelectedMessageId(null)}
-                                                            className={`px-3 sm:px-4 md:px-5 py-2 sm:py-2.5 md:py-3 rounded-lg sm:rounded-2xl shadow-sm cursor-context-menu text-xs sm:text-sm ${isMe ? 'bg-orange-500 text-white rounded-tr-none shadow-orange-500/10' : 'bg-[#1a1a1a] border border-white/10 text-gray-200 rounded-tl-none hover:border-white/20 transition-colors'}`}
-                                                        >
-                                                            <p className="text-sm leading-relaxed whitespace-pre-wrap">{renderMessageContent(msg.content)}</p>
-                                                        </div>
-                                                        <div className="flex items-center gap-1 mt-1 px-1">
-                                                            <span className="text-[8px] sm:text-[10px] text-gray-500 font-mono opacity-70">{formatMessageDate(msg.timestamp)}</span>
-                                                            {starredMessages.includes(msg._id) && <span className="text-yellow-200 text-[10px]">STAR</span>}
-                                                            {pinnedMessages.includes(msg._id) && <span className="text-cyan-200 text-[10px]">PIN</span>}
-                                                            {selectedMessages.includes(msg._id) && <span className="text-violet-200 text-[10px]">SEL</span>}
-                                                            {isMe && <CheckCheck className="w-2.5 sm:w-3 h-2.5 sm:h-3 text-orange-200/80 ml-1" />}
-                                                        </div>
+                                        return (
+                                            <motion.div key={msg._id || idx} variants={messageVariants} initial="hidden" animate="visible" className={`flex w-full ${isMe ? 'justify-end' : 'justify-start'}`}>
+                                                <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[90%] sm:max-w-[85%] md:max-w-[75%] group`}>
+                                                    <div
+                                                        onContextMenu={(e) => handleShowContextMenu(e, msg._id)}
+                                                        onClick={() => setSelectedMessageId(null)}
+                                                        className={`px-3 sm:px-4 md:px-5 py-2 sm:py-2.5 md:py-3 rounded-lg sm:rounded-2xl shadow-sm backdrop-blur-sm cursor-context-menu text-xs sm:text-sm ${isMe ? 'bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-tr-none shadow-orange-500/10' : 'bg-[#1a1a1a] border border-white/10 text-gray-200 rounded-tl-none hover:border-white/20 transition-colors'}`}
+                                                    >
+                                                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{renderMessageContent(msg.content)}</p>
+                                                    </div>
+                                                    <div className="flex items-center gap-1 mt-1 px-1">
+                                                        <span className="text-[8px] sm:text-[10px] text-gray-500 font-mono opacity-70">{formatMessageDate(msg.timestamp)}</span>
+                                                        {starredMessages.includes(msg._id) && <span className="text-yellow-500 text-xs sm:text-sm">★</span>}
+                                                        {isMe && <CheckCheck className="w-2.5 sm:w-3 h-2.5 sm:h-3 text-orange-500/80 ml-1" />}
                                                     </div>
                                                 </div>
-                                            );
-                                        })}
-                                    </>
-                                )}
+                                            </motion.div>
+                                        );
+                                    })}
+                                </AnimatePresence>
                                 {isOtherUserTyping && (
-                                    <div className="flex justify-start w-full">
+                                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex justify-start w-full">
                                         <div className="bg-[#1a1a1a] border border-white/10 px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-2xl rounded-tl-none flex items-center gap-1.5">
                                             <span className="w-1 sm:w-1.5 h-1 sm:h-1.5 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
                                             <span className="w-1 sm:w-1.5 h-1 sm:h-1.5 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
                                             <span className="w-1 sm:w-1.5 h-1 sm:h-1.5 bg-gray-500 rounded-full animate-bounce"></span>
                                         </div>
-                                    </div>
+                                    </motion.div>
                                 )}
                                 <div ref={messagesEndRef} />
                             </div>
 
                             {/* Message Input Area */}
                             <div className="p-2 sm:p-3 md:p-4 bg-[#0a0a0a]/80 backdrop-blur-xl border-t border-white/5 relative z-10">
-                                {replyingTo && (
-                                    <div className="mb-2 flex items-start justify-between gap-2 rounded-xl border border-orange-500/30 bg-orange-500/10 p-2">
-                                        <div>
-                                            <p className="text-[10px] uppercase tracking-wide text-orange-300">Replying to</p>
-                                            <p className="text-xs text-orange-100 line-clamp-2">{String(replyingTo.content || "")}</p>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => setReplyingTo(null)}
-                                            className="text-xs text-orange-200 hover:text-white"
-                                        >
-                                            Cancel
-                                        </button>
-                                    </div>
-                                )}
                                 <form onSubmit={handleSendMessage} className="flex items-end gap-1.5 sm:gap-2 bg-[#151515] border border-white/10 rounded-lg sm:rounded-2xl p-1.5 sm:p-2 focus-within:border-orange-500/40 focus-within:bg-[#1a1a1a] transition-all shadow-lg">
                                     <div className="flex pb-0.5 sm:pb-1">
                                         <input ref={fileInputRef} type="file" className="hidden" />
@@ -997,68 +1071,74 @@ const UserMessages = () => {
                             <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', duration: 0.8 }} className="relative group cursor-pointer">
                                 <div className="absolute inset-0 bg-orange-500/20 blur-3xl rounded-full group-hover:bg-orange-500/30 transition-all duration-500" />
                                 <div className="w-16 sm:w-24 h-16 sm:h-24 rounded-2xl sm:rounded-[2rem] bg-gradient-to-br from-[#1a1a1a] to-black border border-white/10 flex items-center justify-center relative shadow-2xl group-hover:scale-105 transition-transform duration-300">
-                                    <MessageSquare className="w-6 sm:w-10 h-6 sm:h-10 text-orange-300/80" />
+                                    <MessageSquare className="w-6 sm:w-10 h-6 sm:h-10 text-orange-500/80" />
                                 </div>
                             </motion.div>
                             <div className="text-center mt-4 sm:mt-8 space-y-2">
                                 <h3 className="text-lg sm:text-2xl font-bold text-white tracking-tight">Your Workspace Messages</h3>
-                                <p className="text-gray-500 text-xs sm:text-sm max-w-xs sm:max-w-sm mx-auto leading-relaxed">Select a conversation from the sidebar or start a new chat.</p>
+                                <p className="text-gray-500 text-xs sm:text-sm max-w-xs sm:max-w-sm mx-auto leading-relaxed">Select a conversation from the sidebar or start a new chat to collaborate with your team in real-time.</p>
                             </div>
                         </div>
                     )}
                 </div>
             </div>
+            <Footer />
 
-            {/* Context Menu Portal */}
+            {/* Context Menu Portal - Render outside scrollable container */}
             {selectedMessageId && ReactDOM.createPortal(
-                <div
-                    className="fixed bg-[#1a1a1a] border border-white/10 rounded-lg sm:rounded-xl shadow-2xl z-[9999] overflow-hidden min-w-max text-xs sm:text-sm"
-                    style={{ top: `${messageContextPos.y}px`, left: `${messageContextPos.x}px` }}
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    <div className="p-0.5 sm:p-1 space-y-0.5">
-                        {messages.find(m => m._id === selectedMessageId) && (() => {
-                            const msg = messages.find(m => m._id === selectedMessageId);
-                            const senderId = typeof msg.senderId === 'object' ? msg.senderId._id : msg.senderId;
-                            const isMe = senderId === user._id;
-                            return (
-                                <>
-                                    <button onClick={() => handleReplyMessage(msg)} className="w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-gray-300 hover:bg-white/5 rounded transition-colors">
-                                        <Reply className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> Reply
-                                    </button>
-                                    <button onClick={() => handleCopyMessage(msg.content)} className="w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-gray-300 hover:bg-white/5 rounded transition-colors">
-                                        <Copy className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> Copy
-                                    </button>
-                                    <button onClick={() => handleForwardMessage(msg)} className="w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-gray-300 hover:bg-white/5 rounded transition-colors">
-                                        <MoreVertical className="w-3 sm:w-3.5 h-3 sm:h-3.5 rotate-90 flex-shrink-0" /> Forward
-                                    </button>
-                                    <button onClick={() => handlePinMessage(msg)} className={`w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded transition-colors ${pinnedMessages.includes(msg._id) ? 'text-cyan-300 hover:bg-cyan-500/10' : 'text-gray-300 hover:bg-white/5'}`}>
-                                        <Flag className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> {pinnedMessages.includes(msg._id) ? 'Unpin' : 'Pin'}
-                                    </button>
-                                    <div className="h-px bg-white/5 my-0.5"></div>
-                                    <button onClick={() => handleStarMessage(msg._id)} className={`w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded transition-colors ${starredMessages.includes(msg._id) ? 'text-yellow-400 hover:bg-yellow-500/10' : 'text-gray-300 hover:bg-white/5'}`}>
-                                        <Star className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> {starredMessages.includes(msg._id) ? 'Unstar' : 'Star'}
-                                    </button>
-                                    <button onClick={() => handleSelectMessage(msg._id)} className={`w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded transition-colors ${selectedMessages.includes(msg._id) ? 'text-violet-300 hover:bg-violet-500/10' : 'text-gray-300 hover:bg-white/5'}`}>
-                                        <Check className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> {selectedMessages.includes(msg._id) ? 'Unselect' : 'Select'}
-                                    </button>
-                                    <div className="h-px bg-white/5 my-0.5"></div>
-                                    <button onClick={() => handleReportMessage(msg)} className="w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-orange-400 hover:bg-orange-500/10 rounded transition-colors">
-                                        <Flag className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> Report
-                                    </button>
-                                    {isMe && (
-                                        <button onClick={() => handleDeleteMessage(msg._id)} className="w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-red-400 hover:bg-red-500/10 rounded transition-colors">
-                                            <Trash2 className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> Delete
+                <AnimatePresence>
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="fixed bg-[#1a1a1a] border border-white/10 rounded-lg sm:rounded-xl shadow-2xl z-[9999] overflow-hidden min-w-max text-xs sm:text-sm"
+                        style={{ top: `${messageContextPos.y}px`, left: `${messageContextPos.x}px` }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="p-0.5 sm:p-1 space-y-0.5">
+                            {messages.find(m => m._id === selectedMessageId) && (() => {
+                                const msg = messages.find(m => m._id === selectedMessageId);
+                                const senderId = typeof msg.senderId === 'object' ? msg.senderId._id : msg.senderId;
+                                const isMe = senderId === user._id;
+                                return (
+                                    <>
+                                        <button onClick={() => { handleReplyMessage(msg); }} className="w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-gray-300 hover:bg-white/5 rounded transition-colors">
+                                            <Reply className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> Reply
                                         </button>
-                                    )}
-                                </>
-                            );
-                        })()}
-                    </div>
-                </div>,
+                                        <button onClick={() => handleCopyMessage(msg.content)} className="w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-gray-300 hover:bg-white/5 rounded transition-colors">
+                                            <Copy className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> Copy
+                                        </button>
+                                        <button onClick={() => handleForwardMessage(msg)} className="w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-gray-300 hover:bg-white/5 rounded transition-colors">
+                                            <MoreVertical className="w-3 sm:w-3.5 h-3 sm:h-3.5 rotate-90 flex-shrink-0" /> Forward
+                                        </button>
+                                        <button onClick={() => handlePinMessage(msg)} className="w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-gray-300 hover:bg-white/5 rounded transition-colors">
+                                            <Flag className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> Pin
+                                        </button>
+                                        <div className="h-px bg-white/5 my-0.5"></div>
+                                        <button onClick={() => handleStarMessage(msg._id)} className={`w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded transition-colors ${starredMessages.includes(msg._id) ? 'text-yellow-400 hover:bg-yellow-500/10' : 'text-gray-300 hover:bg-white/5'}`}>
+                                            <Star className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> {starredMessages.includes(msg._id) ? 'Unstar' : 'Star'}
+                                        </button>
+                                        <button onClick={() => handleSelectMessage(msg._id)} className="w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-gray-300 hover:bg-white/5 rounded transition-colors">
+                                            <Check className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> Select
+                                        </button>
+                                        <div className="h-px bg-white/5 my-0.5"></div>
+                                        <button onClick={() => handleReportMessage(msg)} className="w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-orange-400 hover:bg-orange-500/10 rounded transition-colors">
+                                            <Flag className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> Report
+                                        </button>
+                                        {isMe && (
+                                            <button onClick={() => handleDeleteMessage(msg._id)} className="w-full flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-red-400 hover:bg-red-500/10 rounded transition-colors">
+                                                <Trash2 className="w-3 sm:w-3.5 h-3 sm:h-3.5 flex-shrink-0" /> Delete
+                                            </button>
+                                        )}
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    </motion.div>
+                </AnimatePresence>,
                 document.body
             )}
-        </DashboardLayout>
+        </>
     );
 };
 

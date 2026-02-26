@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import DashboardLayout from "../../components/layouts/DashboardLayout";
 import MemberProductivityService from "../../services/memberProductivityService";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
@@ -22,7 +22,8 @@ const _FRAMER_MOTION_LOADED = Boolean(motion);
 
 const MetricCard = ({ title, value, hint }) => (
   <motion.div
-    variants={sectionVariants}
+    initial={{ opacity: 0, y: 6 }}
+    animate={{ opacity: 1, y: 0 }}
     whileHover={{ y: -2, scale: 1.01 }}
     transition={{ duration: 0.2 }}
     className="rounded-2xl border border-white/10 bg-[#0f0f0f]/80 p-4"
@@ -38,21 +39,29 @@ const Insights = () => {
   const [payload, setPayload] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadInsights = async (selectedRange) => {
+  // ✅ Wrap in useCallback to prevent unnecessary re-renders and dependency issues
+  const loadInsights = useCallback(async (selectedRange) => {
     try {
       setIsLoading(true);
       const response = await MemberProductivityService.getInsights(selectedRange);
-      setPayload(response);
-    } catch {
-      toast.error("Failed to load insights");
+      
+      if (response) {
+        setPayload(response);
+      } else {
+        toast.error("No data received from server");
+      }
+    } catch (error) {
+      console.error("Error loading insights:", error);
+      toast.error("Failed to load insights. Please try again.");
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
+  // ✅ Call loadInsights when range changes
   useEffect(() => {
     loadInsights(range);
-  }, [range]);
+  }, [range, loadInsights]);
 
   const heatmapRows = useMemo(() => {
     const data = payload?.throughputHeatmap || [];
@@ -97,17 +106,23 @@ const Insights = () => {
             Loading insights...
           </motion.div>
         ) : (
-          <>
-            <motion.div variants={sectionVariants} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="space-y-5"
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               <MetricCard title="Completed" value={metrics.completedCount ?? 0} hint={`Range ${metrics.range || range}`} />
               <MetricCard title="On-Time Ratio" value={`${metrics.onTimeCompletionRatio ?? 0}%`} />
               <MetricCard title="Avg Cycle Time" value={`${metrics.avgCycleTimeHours ?? 0}h`} />
               <MetricCard title="Daily Throughput" value={metrics.averageDailyThroughput ?? 0} />
-            </motion.div>
+            </div>
 
-            <motion.div variants={sectionVariants} className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
               <motion.div
-                variants={sectionVariants}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
                 whileHover={{ y: -2 }}
                 className="xl:col-span-2 rounded-2xl border border-white/10 bg-[#0f0f0f]/80 p-4"
               >
@@ -133,7 +148,8 @@ const Insights = () => {
               </motion.div>
 
               <motion.div
-                variants={sectionVariants}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
                 whileHover={{ y: -2 }}
                 className="rounded-2xl border border-white/10 bg-[#0f0f0f]/80 p-4"
               >
@@ -156,10 +172,11 @@ const Insights = () => {
                   </ul>
                 )}
               </motion.div>
-            </motion.div>
+            </div>
 
             <motion.div
-              variants={sectionVariants}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
               whileHover={{ y: -2 }}
               className="rounded-2xl border border-white/10 bg-[#0f0f0f]/80 p-4"
             >
@@ -187,7 +204,7 @@ const Insights = () => {
                 </div>
               )}
             </motion.div>
-          </>
+          </motion.div>
         )}
       </motion.div>
     </DashboardLayout>

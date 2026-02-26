@@ -53,6 +53,13 @@ const getNotificationIcon = (type) => {
   }
 };
 
+const resolveId = (value) => {
+  if (!value) return null;
+  if (typeof value === "string") return value;
+  if (typeof value === "object") return value._id || value.id || null;
+  return null;
+};
+
 const Notifications = () => {
   const navigate = useNavigate();
   const { user } = useContext(UserContext);
@@ -69,7 +76,11 @@ const Notifications = () => {
         API_PATHS.NOTIFICATIONS.GET_USER_NOTIFICATIONS(user._id, selectedFilter)
       );
       if (response.data?.success) {
-        setNotifications(response.data.data || []);
+        // Filter out message-type notifications
+        const filteredNotifications = (response.data.data || []).filter(
+          (notification) => notification.type !== "message"
+        );
+        setNotifications(filteredNotifications);
       }
     } catch (error) {
       console.error("Failed to fetch notifications:", error);
@@ -132,15 +143,18 @@ const Notifications = () => {
     if (!notification.read) {
       await handleMarkAsRead(notification._id);
     }
-    if (notification.type === "message" && notification.relatedConversationId?._id) {
-      navigate(`/user/messages?conversation=${notification.relatedConversationId._id}`);
+    const conversationId = resolveId(notification.relatedConversationId);
+    const taskId = resolveId(notification.relatedTaskId);
+
+    if (notification.type === "message" && conversationId) {
+      navigate(`/user/messages?conversation=${conversationId}`);
       return;
     }
-    if (notification.relatedTaskId?._id) {
+    if (taskId) {
       if (notification.type === "comment" || notification.type === "mention") {
-        navigate(`/user/task/${notification.relatedTaskId._id}#comments`);
+        navigate(`/user/task/${taskId}#comments`);
       } else {
-        navigate(`/user/task/${notification.relatedTaskId._id}`);
+        navigate(`/user/task/${taskId}`);
       }
       return;
     }

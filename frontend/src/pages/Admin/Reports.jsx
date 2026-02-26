@@ -7,6 +7,7 @@ import {
   LuFilter,
   LuCalendar,
   LuClock,
+  LuRefreshCcw,
   LuTrendingUp,
   LuCircleCheckBig,
   LuCircleAlert,
@@ -26,6 +27,7 @@ const MS_PER_DAY = 1000 * 60 * 60 * 24;
 const DEADLINE_RADAR_DAYS = 7;
 const BOTTLENECK_AGE_DAYS = 5;
 const SLA_RISK_HOURS = 48;
+const LIVE_REFRESH_MS = 30000;
 
 const toId = (value) => {
   if (!value) return null;
@@ -113,19 +115,31 @@ const formatDate = (date) =>
   });
 
 const escapeCsv = (value = "") => `"${String(value ?? "").replace(/"/g, '""')}"`;
+const toTimestamp = (value) => {
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : null;
+};
+const getCreatedTimestamp = (task) => toTimestamp(task?.createdAt);
+const getCompletedTimestamp = (task) => toTimestamp(task?.completedAt);
 
 const Reports = () => {
   const [allTasks, setAllTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [dateRange, setDateRange] = useState("all");
   const [selectedMember, setSelectedMember] = useState("all");
   const [teamMembers, setTeamMembers] = useState([]);
   const [memberSearch, setMemberSearch] = useState("");
   const [error, setError] = useState("");
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
 
-  const fetchReportsData = useCallback(async () => {
+  const fetchReportsData = useCallback(async (backgroundRefresh = false) => {
     try {
-      setLoading(true);
+      if (backgroundRefresh) {
+        setIsRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       setError("");
 
       const [usersResponse, tasksResponse] = await Promise.all([
@@ -135,16 +149,38 @@ const Reports = () => {
 
       setTeamMembers(extractUsers(usersResponse.data));
       setAllTasks(extractTasks(tasksResponse.data));
+      setLastUpdatedAt(new Date());
     } catch (fetchError) {
       console.error("Error loading reports data:", fetchError);
       setError("Unable to load report data. Please refresh the page.");
     } finally {
-      setLoading(false);
+      if (backgroundRefresh) {
+        setIsRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     fetchReportsData();
+  }, [fetchReportsData]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      fetchReportsData(true);
+    }, LIVE_REFRESH_MS);
+
+    return () => clearInterval(intervalId);
+  }, [fetchReportsData]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchReportsData(true);
+    };
+
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
   }, [fetchReportsData]);
 
   const rangeStart = useMemo(() => getRangeStart(dateRange), [dateRange]);
@@ -154,7 +190,7 @@ const Reports = () => {
     const startTime = rangeStart ? rangeStart.getTime() : null;
 
     return allTasks.filter((task) => {
-      const createdAt = new Date(task.createdAt || now).getTime();
+      const createdAt = getCreatedTimestamp(task) ?? now;
 
       if (startTime && createdAt < startTime) return false;
 
@@ -192,22 +228,22 @@ const Reports = () => {
       (task) =>
         task.status !== "Completed" &&
         task.dueDate &&
-        Number.isFinite(new Date(task.dueDate).getTime()) &&
-        new Date(task.dueDate).getTime() < now
+        (toTimestamp(task.dueDate) ?? Number.MAX_SAFE_INTEGER) < now
     ).length;
 
     const avgTasksPerMember =
       membersInScope.length > 0 ? statusCounts.All / membersInScope.length : 0;
 
     const completedTasks = filteredTasks.filter((task) => task.status === "Completed");
-    const completedWithDueDate = completedTasks.filter(
-      (task) => task.dueDate && Number.isFinite(new Date(task.dueDate).getTime())
+    const completedWithTimestamp = completedTasks.filter((task) => getCompletedTimestamp(task));
+    const completedWithDueDate = completedWithTimestamp.filter((task) =>
+      Number.isFinite(toTimestamp(task.dueDate))
     );
 
     const onTimeCompleted = completedWithDueDate.filter((task) => {
-      const completedAt = new Date(task.updatedAt || task.createdAt).getTime();
-      const dueAt = new Date(task.dueDate).getTime();
-      return completedAt <= dueAt;
+      const completedAt = getCompletedTimestamp(task);
+      const dueAt = toTimestamp(task.dueDate);
+      return Number.isFinite(completedAt) && Number.isFinite(dueAt) && completedAt <= dueAt;
     }).length;
 
     const onTimeRate =
@@ -217,15 +253,22 @@ const Reports = () => {
       (task) => task.priority === "High" && task.status !== "Completed"
     ).length;
 
+    const resolutionSamples = completedWithTimestamp
+      .map((task) => {
+        const created = getCreatedTimestamp(task);
+        const closed = getCompletedTimestamp(task);
+        if (!Number.isFinite(created) || !Number.isFinite(closed) || closed < created) return null;
+        return (closed - created) / MS_PER_DAY;
+      })
+      .filter((value) => Number.isFinite(value));
+
     const avgResolutionDays =
-      completedTasks.length > 0
-        ? completedTasks.reduce((sum, task) => {
-            const created = new Date(task.createdAt).getTime();
-            const closed = new Date(task.updatedAt || task.createdAt).getTime();
-            if (!Number.isFinite(created) || !Number.isFinite(closed)) return sum;
-            return sum + (closed - created) / (1000 * 60 * 60 * 24);
-          }, 0) / completedTasks.length
+      resolutionSamples.length > 0
+        ? resolutionSamples.reduce((sum, days) => sum + days, 0) / resolutionSamples.length
         : 0;
+
+    const completedTimestampCoverage =
+      completedTasks.length > 0 ? (completedWithTimestamp.length / completedTasks.length) * 100 : 0;
 
     return {
       statusCounts,
@@ -235,23 +278,25 @@ const Reports = () => {
       onTimeRate,
       highPriorityBacklog,
       avgResolutionDays,
+      completedTimestampCoverage,
     };
   }, [filteredTasks, membersInScope]);
 
   const trendMetrics = useMemo(() => {
     const { currentStart, currentEnd, previousStart, previousEnd } = getTrendWindows(dateRange);
+    const rangeDays = Math.max(1, Math.ceil((currentEnd.getTime() - currentStart.getTime()) / MS_PER_DAY));
 
     const matchesMember = (task) =>
       selectedMember === "all" || getAssigneeIds(task.assignedTo).includes(selectedMember);
 
     const createdInWindow = (task, start, end) => {
-      const createdAt = new Date(task.createdAt).getTime();
+      const createdAt = getCreatedTimestamp(task);
       return Number.isFinite(createdAt) && createdAt >= start.getTime() && createdAt < end.getTime();
     };
 
     const completedInWindow = (task, start, end) => {
       if (task.status !== "Completed") return false;
-      const completedAt = new Date(task.updatedAt || task.createdAt).getTime();
+      const completedAt = getCompletedTimestamp(task);
       return Number.isFinite(completedAt) && completedAt >= start.getTime() && completedAt < end.getTime();
     };
 
@@ -276,6 +321,8 @@ const Reports = () => {
       completedTrend: trendValue(currentCompleted, previousCompleted),
       currentCreated,
       currentCompleted,
+      throughputPerDay: currentCompleted / rangeDays,
+      rangeDays,
       trendLabel: `${currentStart.toLocaleDateString("en-GB")} - ${currentEnd.toLocaleDateString("en-GB")}`,
     };
   }, [allTasks, dateRange, selectedMember]);
@@ -347,15 +394,15 @@ const Reports = () => {
     const now = Date.now();
     const atRiskThreshold = now + SLA_RISK_HOURS * 60 * 60 * 1000;
 
-    const tasksWithDueDate = filteredTasks.filter((task) =>
-      Number.isFinite(new Date(task.dueDate).getTime())
+    const tasksWithDueDate = filteredTasks.filter((task) => Number.isFinite(toTimestamp(task.dueDate)));
+
+    const completedWithDueDate = tasksWithDueDate.filter(
+      (task) => task.status === "Completed" && Number.isFinite(getCompletedTimestamp(task))
     );
 
-    const completedWithDueDate = tasksWithDueDate.filter((task) => task.status === "Completed");
-
     const onTimeCompleted = completedWithDueDate.filter((task) => {
-      const completedAt = new Date(task.updatedAt || task.createdAt).getTime();
-      const dueAt = new Date(task.dueDate).getTime();
+      const completedAt = getCompletedTimestamp(task);
+      const dueAt = toTimestamp(task.dueDate);
       return Number.isFinite(completedAt) && completedAt <= dueAt;
     }).length;
 
@@ -364,12 +411,12 @@ const Reports = () => {
     const openWithDueDate = tasksWithDueDate.filter((task) => task.status !== "Completed");
 
     const breachedOpen = openWithDueDate.filter((task) => {
-      const dueAt = new Date(task.dueDate).getTime();
+      const dueAt = toTimestamp(task.dueDate);
       return Number.isFinite(dueAt) && dueAt < now;
     }).length;
 
     const atRiskOpen = openWithDueDate.filter((task) => {
-      const dueAt = new Date(task.dueDate).getTime();
+      const dueAt = toTimestamp(task.dueDate);
       return Number.isFinite(dueAt) && dueAt >= now && dueAt <= atRiskThreshold;
     }).length;
 
@@ -483,6 +530,18 @@ const Reports = () => {
       list.push(`Completed work is trending up by ${pct(trendMetrics.completedTrend)} versus the previous period.`);
     }
 
+    if (trendMetrics.throughputPerDay > 0) {
+      list.push(
+        `Current throughput is ${trendMetrics.throughputPerDay.toFixed(2)} completed task(s) per day over the selected window.`
+      );
+    }
+
+    if (metrics.completedTimestampCoverage < 100 && metrics.statusCounts.Completed > 0) {
+      list.push(
+        `Data quality note: ${pct(metrics.completedTimestampCoverage)} of completed tasks include a reliable completion timestamp.`
+      );
+    }
+
     if (list.length === 0) {
       list.push("Team performance is stable. Keep current allocation and continue monitoring trend drift.");
     }
@@ -505,8 +564,10 @@ const Reports = () => {
       ["In Progress", metrics.statusCounts.InProgress],
       ["Pending", metrics.statusCounts.Pending],
       ["Completion Rate", pct(metrics.completionRate)],
+      ["Throughput / Day", trendMetrics.throughputPerDay.toFixed(2)],
       ["On-time Rate", pct(metrics.onTimeRate)],
       ["SLA Compliance", pct(slaMetrics.complianceRate)],
+      ["Completed Timestamp Coverage", pct(metrics.completedTimestampCoverage)],
       [`SLA At Risk (${SLA_RISK_HOURS}h)`, slaMetrics.atRiskOpen],
       ["SLA Breached (Open)", slaMetrics.breachedOpen],
       [`Bottlenecks (${BOTTLENECK_AGE_DAYS}d+)`, bottleneckTasks.length],
@@ -529,6 +590,7 @@ const Reports = () => {
     const csv = [
       "Task Manager - Analytics Report",
       `Generated,${formatDateTime(new Date())}`,
+      `Last Synced,${lastUpdatedAt ? formatDateTime(lastUpdatedAt) : "N/A"}`,
       "",
       header.map(escapeCsv).join(","),
       ...metricRows.map((row) => row.map(escapeCsv).join(",")),
@@ -551,6 +613,8 @@ const Reports = () => {
   const handleDownloadJSON = () => {
     const payload = {
       generatedAt: new Date().toISOString(),
+      lastSyncedAt: lastUpdatedAt ? lastUpdatedAt.toISOString() : null,
+      refreshIntervalMs: LIVE_REFRESH_MS,
       filters: {
         dateRange,
         selectedMember,
@@ -601,14 +665,20 @@ const Reports = () => {
             <h1 className="text-4xl font-bold text-gray-100">Reports & Analytics</h1>
             <p className="text-gray-400 mt-2">Comprehensive task management insights and performance metrics</p>
             <p className="text-xs text-gray-500 mt-2">Trend window: {trendMetrics.trendLabel}</p>
+            <p className="text-xs text-gray-500 mt-1">
+              Live data: {lastUpdatedAt ? formatDateTime(lastUpdatedAt) : "Waiting for first sync"} | Auto refresh every{" "}
+              {Math.round(LIVE_REFRESH_MS / 1000)}s
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={fetchReportsData}
-              className="px-3 py-2 bg-white/5 text-gray-300 border border-white/10 rounded-lg hover:border-white/20 transition"
+              onClick={() => fetchReportsData(true)}
+              disabled={isRefreshing}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-white/5 text-gray-300 border border-white/10 rounded-lg hover:border-white/20 transition disabled:opacity-60"
             >
-              Refresh
+              <LuRefreshCcw className={isRefreshing ? "animate-spin" : ""} />
+              {isRefreshing ? "Syncing..." : "Refresh"}
             </button>
             <button
               onClick={handleDownloadCSV}
@@ -685,7 +755,7 @@ const Reports = () => {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           <div className="bg-gradient-to-br from-cyan-500/10 to-cyan-500/5 border border-cyan-500/20 rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
               <span className="text-gray-400 text-sm font-medium">Completion Rate</span>
@@ -702,6 +772,15 @@ const Reports = () => {
             </div>
             <div className="text-3xl font-bold text-orange-300">{metrics.statusCounts.All}</div>
             <p className="text-xs text-gray-500 mt-1">Across filtered scope</p>
+          </div>
+
+          <div className="bg-gradient-to-br from-blue-500/10 to-blue-500/5 border border-blue-500/20 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-gray-400 text-sm font-medium">Throughput / Day</span>
+              <LuTrendingUp className="w-5 h-5 text-blue-400" />
+            </div>
+            <div className="text-3xl font-bold text-blue-300">{trendMetrics.throughputPerDay.toFixed(2)}</div>
+            <p className="text-xs text-gray-500 mt-1">Completed tasks per day</p>
           </div>
 
           <div className="bg-gradient-to-br from-rose-500/10 to-rose-500/5 border border-rose-500/20 rounded-lg p-4">
@@ -739,6 +818,15 @@ const Reports = () => {
             <div className="text-3xl font-bold text-fuchsia-300">{metrics.highPriorityBacklog}</div>
             <p className="text-xs text-gray-500 mt-1">High priority pending/in-progress</p>
           </div>
+
+          <div className="bg-gradient-to-br from-lime-500/10 to-lime-500/5 border border-lime-500/20 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-gray-400 text-sm font-medium">Data Reliability</span>
+              <LuCircleCheckBig className="w-5 h-5 text-lime-400" />
+            </div>
+            <div className="text-3xl font-bold text-lime-300">{pct(metrics.completedTimestampCoverage)}</div>
+            <p className="text-xs text-gray-500 mt-1">Completed tasks with reliable timestamp</p>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -750,7 +838,9 @@ const Reports = () => {
           <div className="bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-lg p-4">
             <p className="text-sm text-gray-400 mb-1">Completed Tasks Trend</p>
             <p className="text-2xl font-bold text-gray-100">{pct(trendMetrics.completedTrend)}</p>
-            <p className="text-xs text-gray-500 mt-1">Current: {trendMetrics.currentCompleted} tasks</p>
+            <p className="text-xs text-gray-500 mt-1">
+              Current: {trendMetrics.currentCompleted} tasks ({trendMetrics.throughputPerDay.toFixed(2)}/day)
+            </p>
           </div>
         </div>
 
@@ -987,7 +1077,8 @@ const Reports = () => {
               ))}
             </div>
             <div className="mt-4 pt-4 border-t border-white/10 text-xs text-gray-500">
-              Avg resolution time: {metrics.avgResolutionDays.toFixed(1)} days
+              Avg resolution time: {metrics.avgResolutionDays.toFixed(1)} days | Completion timestamp coverage:{" "}
+              {pct(metrics.completedTimestampCoverage)}
             </div>
           </div>
         </div>

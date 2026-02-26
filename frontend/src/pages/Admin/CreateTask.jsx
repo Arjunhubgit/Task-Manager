@@ -10,6 +10,7 @@ import SelectUsers from '../../components/inputs/SelectUsers';
 import TodoListInput from '../../components/inputs/TodoListInput.jsx';
 import AddAttachmentsInput from '../../components/inputs/AddAttachmentsInput';
 import AIChatInput from '../../components/inputs/AIChatInput';
+import TaskDescriptionAnalyzer from '../../components/inputs/TaskDescriptionAnalyzer';
 import { UserContext } from '../../context/userContext';
 
 const CreateTask = () => {
@@ -24,6 +25,8 @@ const CreateTask = () => {
     description: "",
     dueDate: "",
     priority: "Medium", // Default to Medium
+    complexity: "Medium", // AI-assessed complexity
+    estimatedHours: null, // AI-predicted effort
     assignedTo: [],
     todoChecklist: [],
     attachments: [],
@@ -49,6 +52,43 @@ const CreateTask = () => {
       attachments: [],
     });
   };
+
+  const applyAIDraftToForm = useCallback((draftTask) => {
+    if (!draftTask) return;
+
+    const normalizeId = (value) => {
+      if (!value) return null;
+      if (typeof value === "string") return value;
+      if (typeof value === "object") return value._id || value.id || null;
+      return null;
+    };
+
+    const checklistFromSubtasks = Array.isArray(draftTask.subtasks)
+      ? draftTask.subtasks.map((item) => (typeof item === "string" ? item : item?.text)).filter(Boolean)
+      : [];
+
+    const checklistFromTodo = Array.isArray(draftTask.todoChecklist)
+      ? draftTask.todoChecklist.map((item) => (typeof item === "string" ? item : item?.text)).filter(Boolean)
+      : [];
+
+    const normalizedAssignees = Array.isArray(draftTask.assignedTo)
+      ? draftTask.assignedTo.map((item) => normalizeId(item)).filter(Boolean)
+      : [];
+
+    setTaskData((prev) => ({
+      ...prev,
+      title: draftTask.title || prev.title,
+      description: draftTask.description || prev.description,
+      dueDate: draftTask.dueDate ? moment(draftTask.dueDate).format("YYYY-MM-DD") : prev.dueDate,
+      priority: draftTask.priority || prev.priority || "Medium",
+      complexity: draftTask.complexity || prev.complexity || "Medium",
+      estimatedHours: draftTask.estimatedHours ?? prev.estimatedHours ?? null,
+      assignedTo: normalizedAssignees,
+      todoChecklist: checklistFromSubtasks.length > 0 ? checklistFromSubtasks : checklistFromTodo,
+      attachments: Array.isArray(draftTask.attachments) ? draftTask.attachments : prev.attachments,
+    }));
+    setError("");
+  }, []);
 
   const createTask = async () => {
     setLoading(true);
@@ -168,7 +208,7 @@ const CreateTask = () => {
         {!taskId && <AIChatInput onTaskCreated={() => {
           toast.success("Task created via AI! You can view it in Manage Tasks.");
           clearData();
-        }} />}
+        }} onTaskDraftGenerated={applyAIDraftToForm} />}
         
         <div className="bg-[#1a1a1a]/60 backdrop-blur-xl border border-white/5 rounded-2xl shadow-2xl overflow-hidden relative">
             
@@ -213,6 +253,25 @@ const CreateTask = () => {
                         />
                     </div>
 
+                    {/* AI Task Analyzer - Shows suggestions before saving */}
+                    {!taskId && taskData.description && (
+                      <TaskDescriptionAnalyzer
+                        title={taskData.title}
+                        description={taskData.description}
+                        userRole={user?.role || 'user'}
+                        onApplySuggestions={(suggestions) => {
+                          // Apply AI suggestions to form
+                          handleValueChange('priority', suggestions.priority);
+                          handleValueChange('complexity', suggestions.complexity);
+                          handleValueChange('estimatedHours', suggestions.estimatedHours);
+                          if (suggestions.tags && suggestions.tags.length > 0) {
+                            // You can add tags if your form supports it
+                          }
+                          toast.success("AI suggestions applied to your task!");
+                        }}
+                      />
+                    )}
+
                     {/* Only show AI banner if creating new task */}
                     {!taskId && (
                       <div className="p-4 bg-gradient-to-r from-blue-900/10 to-purple-900/10 border border-blue-500/20 rounded-xl flex items-start gap-3 relative overflow-hidden group">
@@ -223,7 +282,7 @@ const CreateTask = () => {
                           <div className="relative z-10">
                               <h4 className="text-blue-300 text-sm font-semibold">AI Powered Prioritization</h4>
                               <p className="text-xs text-gray-400 mt-0.5">
-                                  Our AI will automatically assign a priority. You can manually override it below.
+                                  Click "Analyze with AI" above to get suggestions, or let the system auto-assign priority when you save.
                               </p>
                           </div>
                       </div>

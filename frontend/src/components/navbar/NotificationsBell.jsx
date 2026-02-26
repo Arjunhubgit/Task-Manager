@@ -1,10 +1,19 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
 import { Bell, CheckCircle, AlertCircle, MessageSquare, UserPlus, Clock, X, Trash2 } from 'lucide-react';
 import { UserContext } from '../../context/userContext';
+import { useNavigate } from 'react-router-dom';
 
 const NotificationsBell = () => {
     const [isOpen, setIsOpen] = useState(false);
-    const { notifications, markNotificationAsRead, deleteNotification, markAllNotificationsAsRead, deleteAllNotifications } = useContext(UserContext);
+    const {
+        user,
+        notifications,
+        markNotificationAsRead,
+        deleteNotification,
+        markAllNotificationsAsRead,
+        deleteAllNotifications
+    } = useContext(UserContext);
+    const navigate = useNavigate();
 
     const notificationsRef = useRef(null);
     const unreadCount = notifications.filter(n => !n.read).length;
@@ -65,6 +74,40 @@ const NotificationsBell = () => {
                 return 'text-pink-500 bg-pink-500/10';
             default:
                 return 'text-gray-500 bg-gray-500/10';
+        }
+    };
+
+    const resolveId = (value) => {
+        if (!value) return null;
+        if (typeof value === 'string') return value;
+        if (typeof value === 'object') return value._id || value.id || null;
+        return null;
+    };
+
+    const handleNotificationClick = async (notification, notificationId) => {
+        if (!notification?.read) {
+            await markNotificationAsRead(notificationId);
+        }
+
+        const taskId = resolveId(notification.relatedTaskId);
+        const conversationId = resolveId(notification.relatedConversationId);
+        const isMember = user?.role === 'member';
+        const isAdmin = user?.role === 'admin';
+
+        if (notification.type === 'message' && conversationId) {
+            navigate(isAdmin ? `/admin/messages?conversation=${conversationId}` : `/user/messages?conversation=${conversationId}`);
+            setIsOpen(false);
+            return;
+        }
+
+        if (taskId && isMember) {
+            if (notification.type === 'comment' || notification.type === 'mention') {
+                navigate(`/user/task/${taskId}#comments`);
+            } else {
+                navigate(`/user/task/${taskId}`);
+            }
+            setIsOpen(false);
+            return;
         }
     };
 
@@ -130,7 +173,7 @@ const NotificationsBell = () => {
                                         className={`p-3 border-b border-white/5 hover:bg-white/[0.02] transition-colors group cursor-pointer ${
                                             !notification.read ? 'bg-white/[0.04] border-l-2 border-l-orange-500' : ''
                                         }`}
-                                        onClick={() => markNotificationAsRead(notificationId)}
+                                        onClick={() => handleNotificationClick(notification, notificationId)}
                                     >
                                         <div className="flex gap-3">
                                             {/* Icon */}
@@ -179,7 +222,13 @@ const NotificationsBell = () => {
                     {/* Footer */}
                     {notifications.length > 0 && (
                         <div className="p-3 border-t border-white/5 bg-white/[0.02]">
-                            <button className="w-full text-center py-2 text-xs text-orange-500 hover:text-orange-400 font-medium transition-colors hover:bg-white/5 rounded-lg">
+                            <button
+                                className="w-full text-center py-2 text-xs text-orange-500 hover:text-orange-400 font-medium transition-colors hover:bg-white/5 rounded-lg"
+                                onClick={() => {
+                                    navigate(user?.role === 'admin' ? '/admin/notifications' : '/user/notifications');
+                                    setIsOpen(false);
+                                }}
+                            >
                                 View all notifications
                             </button>
                         </div>

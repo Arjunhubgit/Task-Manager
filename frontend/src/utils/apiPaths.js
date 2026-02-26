@@ -1,4 +1,8 @@
-export const BASE_URL = "http://localhost:8000"; 
+export const BASE_URL =
+  (typeof import.meta !== "undefined" &&
+    import.meta.env &&
+    import.meta.env.VITE_API_BASE_URL) ||
+  "http://localhost:8000";
 
 export const API_PATHS = {
   AUTH: {
@@ -38,6 +42,7 @@ export const API_PATHS = {
     CREATE_TASK_FROM_AI: "/api/tasks/ai-create", 
     GENERATE_SUBTASKS: "/api/tasks/ai-generate-subtasks", // <--- ADD THIS LINE
     AI_ASSIST: (taskId) => `/api/tasks/${taskId}/ai-assist`,
+    AUTO_SUMMARIZE_TASK: (taskId) => `/api/tasks/${taskId}/auto-summarize`,
     // ----------------
   },
   

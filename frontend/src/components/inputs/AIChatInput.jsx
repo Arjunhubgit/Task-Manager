@@ -1,12 +1,36 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import axiosInstance from "../../utils/axiosInstance";
 import { API_PATHS } from "../../utils/apiPaths";
 import toast from "react-hot-toast";
 import { LuSparkles, LuSend } from "react-icons/lu";
+import AITaskSuggestionPanel from './AITaskSuggestionPanel';
 
-const AIChatInput = ({ onTaskCreated }) => {
+const AIChatInput = ({ onTaskCreated, onTaskDraftGenerated }) => {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [pendingTask, setPendingTask] = useState(null);
+  const [teamMembers, setTeamMembers] = useState([]);
+
+  useEffect(() => {
+    const fetchTeamMembers = async () => {
+      try {
+        const response = await axiosInstance.get(API_PATHS.USERS.GET_ALL_USERS);
+        const normalized = Array.isArray(response?.data)
+          ? response.data.map((member) => ({
+              _id: member?._id,
+              name: member?.name,
+              email: member?.email,
+            })).filter((member) => member._id && member.name)
+          : [];
+        setTeamMembers(normalized);
+      } catch (error) {
+        console.error("Failed to fetch team members for AI assignment:", error);
+      }
+    };
+
+    fetchTeamMembers();
+  }, []);
 
   const handleAISubmit = async (e) => {
     e.preventDefault();
@@ -14,10 +38,25 @@ const AIChatInput = ({ onTaskCreated }) => {
 
     setLoading(true);
     try {
-      const response = await axiosInstance.post(API_PATHS.TASKS.CREATE_TASK_FROM_AI, { prompt });
-      toast.success("Task created automatically!");
-      setPrompt("");
-      if (onTaskCreated) onTaskCreated(response.data); // Refresh the list
+      const response = await axiosInstance.post(API_PATHS.TASKS.CREATE_TASK_FROM_AI, {
+        prompt,
+        teamMembers,
+      });
+      
+      if (response.data.task) {
+        // Show suggestions panel with the AI analysis
+        setPendingTask({
+          ...response.data.task,
+          aiAnalysis: response.data.task.aiAnalysis || {},
+        });
+        setShowSuggestions(true);
+        setPrompt("");
+        toast.success("AI analyzed your task! Review suggestions below.");
+      } else {
+        toast.success("Task created automatically!");
+        setPrompt("");
+        if (onTaskCreated) onTaskCreated(response.data);
+      }
     } catch (error) {
       console.error(error);
       toast.error("Failed to create task via AI.");
@@ -25,6 +64,54 @@ const AIChatInput = ({ onTaskCreated }) => {
       setLoading(false);
     }
   };
+
+  const handleAcceptSuggestions = async (changes) => {
+    try {
+      // Merge accepted changes with pending task
+      const updatedTask = {
+        ...pendingTask,
+        ...changes,
+      };
+
+      // Preferred flow: fill create form as draft, then user selects assignees and submits.
+      if (onTaskDraftGenerated) {
+        onTaskDraftGenerated(updatedTask);
+        setShowSuggestions(false);
+        setPendingTask(null);
+        toast.success("AI draft applied with suggested assignees. Review and click Create Task.");
+        return;
+      }
+
+      // Fallback flow (if draft callback is not provided): create directly.
+      const response = await axiosInstance.post(API_PATHS.TASKS.CREATE_TASK, updatedTask);
+      setShowSuggestions(false);
+      setPendingTask(null);
+      toast.success("Task created with AI enhancements!");
+      
+      if (onTaskCreated) onTaskCreated(response.data);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to save task with suggestions.");
+    }
+  };
+
+  const handleDismissSuggestions = () => {
+    toast.info("You can still edit suggestions later");
+    setShowSuggestions(false);
+    setPendingTask(null);
+  };
+
+  if (showSuggestions && pendingTask) {
+    return (
+      <AITaskSuggestionPanel
+        aiAnalysis={pendingTask.aiAnalysis}
+        taskTitle={pendingTask.title}
+        onAccept={handleAcceptSuggestions}
+        onDismiss={handleDismissSuggestions}
+        isLoading={false}
+      />
+    );
+  }
 
   return (
     <div className="mb-6 p-4 bg-gradient-to-r from-[#1a1a1a] to-[#2a2a2a] rounded-xl border border-white/10 shadow-lg">
