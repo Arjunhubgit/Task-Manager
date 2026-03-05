@@ -105,10 +105,17 @@ const UserMessages = () => {
 
     const getConversationId = useCallback((conversation) => {
         if (!conversation) return null;
-        if (conversation._id && conversation._id !== conversation.participantId) {
+        const participantId = conversation.participantId ? String(conversation.participantId) : null;
+        const conversationId = conversation.conversationId ? String(conversation.conversationId) : null;
+        const objectId = conversation._id ? String(conversation._id) : null;
+
+        if (conversationId && (!participantId || conversationId !== participantId)) {
+            return conversation.conversationId;
+        }
+        if (objectId && (!participantId || objectId !== participantId)) {
             return conversation._id;
         }
-        return conversation.conversationId || null;
+        return null;
     }, []);
 
     const getConversationStorageKey = useCallback((conversation) => {
@@ -200,11 +207,12 @@ const UserMessages = () => {
         }
         socket.emit('join', user._id);
 
-        socket.on('receiveMessage', (data) => {
+        const handleReceiveMessage = (data) => {
             const currentConversation = selectedConversationRef.current;
+            const activeConversationId = getConversationId(currentConversation);
             const isCurrentChat = currentConversation &&
-                (data.conversationId === currentConversation._id ||
-                    data.senderId === currentConversation.participantId);
+                ((activeConversationId && String(data.conversationId) === String(activeConversationId)) ||
+                    String(data.senderId) === String(currentConversation.participantId));
 
             if (isCurrentChat) {
                 setMessages(prev => {
@@ -229,7 +237,11 @@ const UserMessages = () => {
 
             setConversations((prev) => {
                 const updated = prev.map((conv) => {
-                    if (conv._id === data.conversationId || conv.participantId === data.senderId) {
+                    const convId = getConversationId(conv);
+                    if (
+                        (convId && String(convId) === String(data.conversationId)) ||
+                        String(conv.participantId) === String(data.senderId)
+                    ) {
                         return {
                             ...conv,
                             lastMessage: data.content,
@@ -249,50 +261,44 @@ const UserMessages = () => {
                 }
                 return updated;
             });
-        });
+        };
 
-        socket.on('typing', (data) => {
+        const handleTyping = (data) => {
             const currentConversation = selectedConversationRef.current;
             if (currentConversation && data.senderId === currentConversation.participantId) {
                 setIsOtherUserTyping(true);
                 clearTimeout(typingTimeoutRef.current);
                 typingTimeoutRef.current = setTimeout(() => setIsOtherUserTyping(false), 3000);
             }
-        });
+        };
 
-        socket.on('userStatusChanged', (data) => {
+        const handleUserStatusChanged = (data) => {
             setConversations((prev) => {
                 return prev.map(conv =>
                     conv.participantId === data.userId
-                        ? { ...conv, participantStatus: data.status }
+                        ? { ...conv, participantStatus: data.status, participantIsOnline: data.status !== 'invisible' }
                         : conv
                 );
             });
 
             setSelectedConversation((prev) => {
                 if (prev && prev.participantId === data.userId) {
-                    return { ...prev, participantStatus: data.status };
+                    return { ...prev, participantStatus: data.status, participantIsOnline: data.status !== 'invisible' };
                 }
                 return prev;
             });
-        });
+        };
+
+        socket.on('receiveMessage', handleReceiveMessage);
+        socket.on('typing', handleTyping);
+        socket.on('userStatusChanged', handleUserStatusChanged);
 
         return () => {
-            socket.off('receiveMessage');
-            socket.off('typing');
-            socket.off('userStatusChanged');
-            // Don't disconnect on cleanup - only disconnect on component unmount
+            socket.off('receiveMessage', handleReceiveMessage);
+            socket.off('typing', handleTyping);
+            socket.off('userStatusChanged', handleUserStatusChanged);
         };
     }, [user?._id, getConversationId]);
-
-    // Disconnect socket only on component unmount
-    useEffect(() => {
-        return () => {
-            if (socket.connected) {
-                socket.disconnect();
-            }
-        };
-    }, []);
 
     // --- Fetch Data Logic ---
     const fetchConversations = useCallback(async () => {

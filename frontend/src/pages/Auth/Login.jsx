@@ -113,7 +113,11 @@ const Login = () => {
       });
       handleAuthSuccess(response.data);
     } catch (err) {
-      if (err.response) {
+      if (err?.code === "auth/unauthorized-domain") {
+        setError("Google sign-in blocked for this domain. Add this IP/domain in Firebase Authorized domains.");
+      } else if (err?.code === "auth/popup-blocked") {
+        setError("Popup blocked by browser. Allow popups and try Google sign-in again.");
+      } else if (err.response) {
         setError(err.response.data?.message || "Google authentication failed. Please try again.");
       } else if (err.request) {
         setError("Network error: Unable to reach Google authentication server.");

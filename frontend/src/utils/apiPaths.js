@@ -1,8 +1,44 @@
-export const BASE_URL =
-  (typeof import.meta !== "undefined" &&
-    import.meta.env &&
-    import.meta.env.VITE_API_BASE_URL) ||
-  "http://localhost:8000";
+const normalizeBaseUrl = (url = "") => String(url).trim().replace(/\/+$/, "");
+
+const envBaseUrl =
+  typeof import.meta !== "undefined" &&
+  import.meta.env &&
+  (import.meta.env.VITE_API_BASE_URL ||
+    import.meta.env.VITE_BACKEND_URL ||
+    import.meta.env.VITE_BASE_URL)
+    ? normalizeBaseUrl(
+        import.meta.env.VITE_API_BASE_URL ||
+          import.meta.env.VITE_BACKEND_URL ||
+          import.meta.env.VITE_BASE_URL
+      )
+    : "";
+
+const browserOrigin =
+  typeof window !== "undefined" && window.location ? window.location.origin : "";
+
+const browserHostname =
+  typeof window !== "undefined" && window.location ? window.location.hostname : "";
+
+const browserPort =
+  typeof window !== "undefined" && window.location ? window.location.port : "";
+
+const browserProtocol =
+  typeof window !== "undefined" && window.location ? window.location.protocol : "http:";
+
+const isLocalhost =
+  typeof window !== "undefined" &&
+  window.location &&
+  ["localhost", "127.0.0.1"].includes(browserHostname);
+
+const isDevFrontendPort = ["5173", "3000"].includes(browserPort);
+
+const defaultBaseUrl = isDevFrontendPort
+  ? `${browserProtocol}//${browserHostname}:8000`
+  : isLocalhost
+    ? "http://localhost:8000"
+    : normalizeBaseUrl(browserOrigin);
+
+export const BASE_URL = envBaseUrl || defaultBaseUrl;
 
 export const API_PATHS = {
   AUTH: {

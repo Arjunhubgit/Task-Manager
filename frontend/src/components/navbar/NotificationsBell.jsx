@@ -9,14 +9,16 @@ const NotificationsBell = () => {
         user,
         notifications,
         markNotificationAsRead,
-        deleteNotification,
-        markAllNotificationsAsRead,
-        deleteAllNotifications
+        deleteNotification
     } = useContext(UserContext);
     const navigate = useNavigate();
 
     const notificationsRef = useRef(null);
-    const unreadCount = notifications.filter(n => !n.read).length;
+    const isUserOrAdmin = user?.role === 'member' || user?.role === 'admin';
+    const visibleNotifications = isUserOrAdmin
+        ? notifications.filter((notification) => notification.type !== 'message')
+        : notifications;
+    const unreadCount = visibleNotifications.filter(n => !n.read).length;
 
     // Map notification types to icons
     const getIconComponent = (notificationType) => {
@@ -90,15 +92,7 @@ const NotificationsBell = () => {
         }
 
         const taskId = resolveId(notification.relatedTaskId);
-        const conversationId = resolveId(notification.relatedConversationId);
         const isMember = user?.role === 'member';
-        const isAdmin = user?.role === 'admin';
-
-        if (notification.type === 'message' && conversationId) {
-            navigate(isAdmin ? `/admin/messages?conversation=${conversationId}` : `/user/messages?conversation=${conversationId}`);
-            setIsOpen(false);
-            return;
-        }
 
         if (taskId && isMember) {
             if (notification.type === 'comment' || notification.type === 'mention') {
@@ -109,6 +103,19 @@ const NotificationsBell = () => {
             setIsOpen(false);
             return;
         }
+    };
+
+    const handleMarkAllVisibleAsRead = async () => {
+        const unreadVisible = visibleNotifications.filter((notification) => !notification.read);
+        await Promise.all(
+            unreadVisible.map((notification) => markNotificationAsRead(notification._id || notification.id))
+        );
+    };
+
+    const handleDeleteAllVisible = async () => {
+        await Promise.all(
+            visibleNotifications.map((notification) => deleteNotification(notification._id || notification.id))
+        );
     };
 
     return (
@@ -138,15 +145,15 @@ const NotificationsBell = () => {
                         <div className="flex items-center gap-2">
                             {unreadCount > 0 && (
                                 <button
-                                    onClick={markAllNotificationsAsRead}
+                                    onClick={handleMarkAllVisibleAsRead}
                                     className="flex-1 text-xs text-orange-500 hover:text-orange-400 transition-colors font-medium bg-orange-500/10 hover:bg-orange-500/20 py-1.5 px-2 rounded-lg"
                                 >
                                     Mark all as read
                                 </button>
                             )}
-                            {notifications.length > 0 && (
+                            {visibleNotifications.length > 0 && (
                                 <button
-                                    onClick={deleteAllNotifications}
+                                    onClick={handleDeleteAllVisible}
                                     className="flex-1 text-xs text-red-500 hover:text-red-400 transition-colors font-medium bg-red-500/10 hover:bg-red-500/20 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1"
                                 >
                                     <Trash2 className="w-3 h-3" />
@@ -158,13 +165,13 @@ const NotificationsBell = () => {
 
                     {/* Notifications List */}
                     <div className="max-h-72 sm:max-h-96 overflow-y-auto custom-scrollbar">
-                        {notifications.length === 0 ? (
+                        {visibleNotifications.length === 0 ? (
                             <div className="p-8 text-center">
                                 <Bell className="w-8 h-8 text-gray-700 mx-auto mb-2" />
                                 <p className="text-sm text-gray-500">No notifications yet</p>
                             </div>
                         ) : (
-                            notifications.map(notification => {
+                            visibleNotifications.map(notification => {
                                 const notificationId = notification._id || notification.id;
                                 const Icon = getIconComponent(notification.type);
                                 return (
@@ -220,7 +227,7 @@ const NotificationsBell = () => {
                     </div>
 
                     {/* Footer */}
-                    {notifications.length > 0 && (
+                    {visibleNotifications.length > 0 && (
                         <div className="p-3 border-t border-white/5 bg-white/[0.02]">
                             <button
                                 className="w-full text-center py-2 text-xs text-orange-500 hover:text-orange-400 font-medium transition-colors hover:bg-white/5 rounded-lg"

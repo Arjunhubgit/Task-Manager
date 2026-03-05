@@ -103,10 +103,12 @@ const ManageUsers = () => {
 
   // --- Socket.io Real-time Status Updates ---
   useEffect(() => {
-    socket.connect();
+    if (!socket.connected) {
+      socket.connect();
+    }
     
     // Listen for user status changes and update immediately
-    socket.on('userStatusChanged', (data) => {
+    const handleUserStatusChanged = (data) => {
       // data: { userId, status, timestamp }
       setUsers((prevUsers) => {
         const isOnline = ['online', 'idle', 'dnd'].includes(data.status);
@@ -121,11 +123,11 @@ const ManageUsers = () => {
           return user;
         });
       });
-    });
+    };
+    socket.on('userStatusChanged', handleUserStatusChanged);
 
     return () => {
-      socket.off('userStatusChanged');
-      socket.disconnect();
+      socket.off('userStatusChanged', handleUserStatusChanged);
     };
   }, []);
 

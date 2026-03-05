@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import axiosInstance from "../../utils/axiosInstance";
 import { API_PATHS } from "../../utils/apiPaths";
 import { Activity, Shield, Clock, User, FileText } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const AuditLogs = () => {
   const [logs, setLogs] = useState([]);
@@ -131,13 +132,13 @@ const AuditLogs = () => {
       {/* View All Link */}
       {logs.length > 8 && (
         <div className="mt-4 text-center">
-          <a 
-            href="/host/audit-logs"
+          <Link
+            to="/host/audit-logs"
             className="inline-flex items-center gap-2 text-[#EA8D23] hover:text-[#ff9d3d] font-semibold transition-colors text-sm"
           >
             View all activity logs
             <span>→</span>
-          </a>
+          </Link>
         </div>
       )}
     </div>

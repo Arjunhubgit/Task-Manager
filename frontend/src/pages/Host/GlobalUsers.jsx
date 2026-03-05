@@ -25,18 +25,23 @@ const GlobalUsers = () => {
 
 	// Listen for real-time user status changes
 	useEffect(() => {
-		socket.on('userStatusChanged', (data) => {
+		const handleUserStatusChanged = (data) => {
 			setUsers(prevUsers => 
 				prevUsers.map(u => 
 					u._id === data.userId 
-						? { ...u, status: data.status, isOnline: data.status === 'online' }
+						? { ...u, status: data.status, isOnline: data.status !== 'invisible' }
 						: u
 				)
 			);
-		});
+		};
+
+		if (!socket.connected) {
+			socket.connect();
+		}
+		socket.on('userStatusChanged', handleUserStatusChanged);
 
 		return () => {
-			socket.off('userStatusChanged');
+			socket.off('userStatusChanged', handleUserStatusChanged);
 		};
 	}, []);
 

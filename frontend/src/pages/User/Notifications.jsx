@@ -143,13 +143,7 @@ const Notifications = () => {
     if (!notification.read) {
       await handleMarkAsRead(notification._id);
     }
-    const conversationId = resolveId(notification.relatedConversationId);
     const taskId = resolveId(notification.relatedTaskId);
-
-    if (notification.type === "message" && conversationId) {
-      navigate(`/user/messages?conversation=${conversationId}`);
-      return;
-    }
     if (taskId) {
       if (notification.type === "comment" || notification.type === "mention") {
         navigate(`/user/task/${taskId}#comments`);

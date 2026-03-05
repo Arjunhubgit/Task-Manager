@@ -142,7 +142,11 @@ const SignUp = () => {
       navigate(response.data.role === 'admin' ? '/admin/dashboard' : '/user/dashboard');
     } catch (err) {
       let errorMessage = "Google Sign In failed. Please try again.";
-      if (err.response) {
+      if (err?.code === "auth/unauthorized-domain") {
+        errorMessage = "Google sign-in blocked for this domain. Add this IP/domain in Firebase Authorized domains.";
+      } else if (err?.code === "auth/popup-blocked") {
+        errorMessage = "Popup blocked by browser. Allow popups and try again.";
+      } else if (err.response) {
         errorMessage = err.response.data?.message || errorMessage;
       } else if (err.request) {
         errorMessage = "Network error: Unable to reach Google authentication server.";

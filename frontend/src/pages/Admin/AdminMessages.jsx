@@ -105,14 +105,19 @@ const AdminMessages = () => {
 
     const getConversationId = (conversation) => {
         if (!conversation) return null;
-        // Prefer conversationId if available (backend's standard field)
-        if (conversation.conversationId) {
+        const participantId = conversation.participantId ? String(conversation.participantId) : null;
+        const conversationId = conversation.conversationId ? String(conversation.conversationId) : null;
+        const objectId = conversation._id ? String(conversation._id) : null;
+
+        // Prefer explicit conversationId when it is not just the participant id placeholder.
+        if (conversationId && (!participantId || conversationId !== participantId)) {
             return conversation.conversationId;
         }
-        // Fallback to _id
-        if (conversation._id) {
+        // Fallback to _id when it is not just the participant id placeholder.
+        if (objectId && (!participantId || objectId !== participantId)) {
             return conversation._id;
         }
+        // No real conversation exists yet (user-list placeholder row).
         return null;
     };
 
@@ -193,7 +198,6 @@ const AdminMessages = () => {
     useEffect(() => {
         if (!user || !user._id) return;
 
-        // Initialize socket connection with retry logic
         const initSocket = () => {
             if (!socket.connected) {
                 try {
@@ -207,26 +211,26 @@ const AdminMessages = () => {
         initSocket();
         socket.emit('join', user._id);
 
-        // Reconnect on disconnect
-        socket.on('disconnect', () => {
+        const handleDisconnect = () => {
             console.warn('Socket disconnected, attempting to reconnect...');
             setTimeout(() => {
                 if (!socket.connected) {
                     initSocket();
                 }
             }, 2000);
-        });
+        };
 
-        socket.on('connect_error', (error) => {
+        const handleConnectError = (error) => {
             console.error('Socket connection error:', error);
-        });
+        };
 
-        socket.on('receiveMessage', (data) => {
+        const handleReceiveMessage = (data) => {
             const currentConversation = selectedConversationRef.current;
+            const activeConversationId = getConversationId(currentConversation);
             // Check if this message belongs to the chat currently open
             const isCurrentChat = currentConversation &&
-                (data.conversationId === currentConversation.conversationId ||
-                    data.senderId === currentConversation.participantId);
+                ((activeConversationId && String(data.conversationId) === String(activeConversationId)) ||
+                    String(data.senderId) === String(currentConversation.participantId));
 
             // Only add message to view if it's for the current conversation
             if (isCurrentChat) {
@@ -250,8 +254,12 @@ const AdminMessages = () => {
             // Always update the conversation list preview
             setConversations((prev) => {
                 const updated = prev.map(conv => {
+                    const convId = getConversationId(conv);
                     // Find the conversation this message belongs to
-                    if (conv.participantId === data.senderId || conv.conversationId === data.conversationId) {
+                    if (
+                        String(conv.participantId) === String(data.senderId) ||
+                        (convId && String(convId) === String(data.conversationId))
+                    ) {
                         return {
                             ...conv,
                             lastMessage: data.content,
@@ -264,9 +272,9 @@ const AdminMessages = () => {
                 });
                 return updated.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
             });
-        });
+        };
 
-        socket.on('typing', (data) => {
+        const handleTyping = (data) => {
             const currentConversation = selectedConversationRef.current;
             if (currentConversation && data.senderId === currentConversation.participantId) {
                 setIsOtherUserTyping(true);
@@ -275,17 +283,18 @@ const AdminMessages = () => {
                     setIsOtherUserTyping(false);
                 }, 3000);
             }
-        });
+        };
 
         // Listen for user status changes
-        socket.on('userStatusChanged', (data) => {
+        const handleUserStatusChanged = (data) => {
             // data: { userId, status, timestamp }
             setConversations((prev) => {
                 const updated = prev.map(conv => {
                     if (conv.participantId === data.userId) {
                         return {
                             ...conv,
-                            participantStatus: data.status
+                            participantStatus: data.status,
+                            participantIsOnline: data.status !== 'invisible'
                         };
                     }
                     return conv;
@@ -298,29 +307,28 @@ const AdminMessages = () => {
                 if (prev && prev.participantId === data.userId) {
                     return {
                         ...prev,
-                        participantStatus: data.status
+                        participantStatus: data.status,
+                        participantIsOnline: data.status !== 'invisible'
                     };
                 }
                 return prev;
             });
-        });
+        };
+
+        socket.on('disconnect', handleDisconnect);
+        socket.on('connect_error', handleConnectError);
+        socket.on('receiveMessage', handleReceiveMessage);
+        socket.on('typing', handleTyping);
+        socket.on('userStatusChanged', handleUserStatusChanged);
 
         return () => {
-            socket.off('receiveMessage');
-            socket.off('typing');
-            socket.off('userStatusChanged');
-            // Don't disconnect on cleanup - only disconnect on component unmount
+            socket.off('disconnect', handleDisconnect);
+            socket.off('connect_error', handleConnectError);
+            socket.off('receiveMessage', handleReceiveMessage);
+            socket.off('typing', handleTyping);
+            socket.off('userStatusChanged', handleUserStatusChanged);
         };
     }, [user?._id, markAsRead]);
-
-    // Disconnect socket only on component unmount
-    useEffect(() => {
-        return () => {
-            if (socket.connected) {
-                socket.disconnect();
-            }
-        };
-    }, []);
 
     // --- Fetch Data Logic ---
     const fetchConversations = useCallback(async () => {
@@ -345,70 +353,82 @@ const AdminMessages = () => {
             
             // The backend returns an array of conversations directly
             const conversations = Array.isArray(response.data) ? response.data : [];
-            
-            if (conversations.length > 0) {
-                // Transform conversations to include participant details
-                const transformedConversations = conversations.map(conv => {
-                    // Find the other participant (not the current user)
-                    let otherParticipant = null;
-                    
-                    if (conv.participants && Array.isArray(conv.participants)) {
-                        otherParticipant = conv.participants.find(p => {
-                            if (!p || !p._id) return false;
-                            const participantId = p._id?.toString?.() || String(p._id);
-                            const currentUserId = user._id?.toString?.() || String(user._id);
-                            return participantId !== currentUserId;
-                        });
-                    }
 
-                    return {
-                        _id: conv._id,
-                        conversationId: conv._id,
-                        participantId: otherParticipant?._id || '',
-                        participantName: otherParticipant?.name || 'Unknown User',
-                        participantEmail: otherParticipant?.email || 'No email',
-                        participantImage: otherParticipant?.profileImageUrl || '',
-                        participantRole: otherParticipant?.role || 'user',
-                        participantStatus: otherParticipant?.status || 'offline',
-                        participantIsOnline: otherParticipant?.isOnline || false,
-                        lastMessage: conv.lastMessage || 'Start a conversation...',
-                        timestamp: conv.lastMessageTime || new Date(),
-                        unread: 0,
-                        participants: conv.participants || []
-                    };
-                });
-                
-                transformedConversations.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                setConversations(transformedConversations);
-                
-                // Cache conversations
-                localStorage.setItem(`conversations_${user._id}`, JSON.stringify(transformedConversations));
-            } else {
-                // If no conversations found, fetch all users as initial list
-                const usersResponse = await axiosInstance.get('/api/users/for-messaging');
-                if (usersResponse.data && usersResponse.data.users && Array.isArray(usersResponse.data.users)) {
-                    const allMembers = usersResponse.data.users.map(u => ({
-                        _id: u._id,
-                        conversationId: u._id,
-                        participantId: u._id,
-                        participantName: u.name || 'Unknown User',
-                        participantEmail: u.email || 'No email',
-                        participantImage: u.profileImageUrl,
-                        participantRole: u.role,
-                        participantStatus: u.status,
-                        participantIsOnline: u.isOnline,
-                        lastMessage: 'Start a conversation...',
-                        timestamp: new Date(),
-                        unread: 0
-                    }));
-                    
-                    allMembers.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                    setConversations(allMembers);
-                    
-                    // Cache conversations
-                    localStorage.setItem(`conversations_${user._id}`, JSON.stringify(allMembers));
+            // Transform conversations to include participant details
+            const transformedConversations = conversations.map(conv => {
+                let otherParticipant = null;
+
+                if (conv.participants && Array.isArray(conv.participants)) {
+                    otherParticipant = conv.participants.find(p => {
+                        if (!p || !p._id) return false;
+                        const participantId = p._id?.toString?.() || String(p._id);
+                        const currentUserId = user._id?.toString?.() || String(user._id);
+                        return participantId !== currentUserId;
+                    });
                 }
+
+                return {
+                    _id: conv._id,
+                    conversationId: conv._id,
+                    participantId: otherParticipant?._id || '',
+                    participantName: otherParticipant?.name || 'Unknown User',
+                    participantEmail: otherParticipant?.email || 'No email',
+                    participantImage: otherParticipant?.profileImageUrl || '',
+                    participantRole: otherParticipant?.role || 'user',
+                    participantStatus: otherParticipant?.status || 'offline',
+                    participantIsOnline: otherParticipant?.isOnline || false,
+                    lastMessage: conv.lastMessage || 'Start a conversation...',
+                    timestamp: conv.lastMessageTime || new Date(),
+                    unread: 0,
+                    participants: conv.participants || []
+                };
+            });
+
+            // Always load admin messaging roster and merge with conversations,
+            // so admin can see all members under them even before first message.
+            let messagingUsers = [];
+            try {
+                const usersResponse = await axiosInstance.get('/api/users/for-messaging');
+                messagingUsers = Array.isArray(usersResponse?.data?.users) ? usersResponse.data.users : [];
+            } catch (usersError) {
+                console.warn('Failed to load users for messaging list:', usersError);
             }
+
+            const placeholderUsers = messagingUsers.map(u => ({
+                _id: u._id,
+                participantId: u._id,
+                participantName: u.name || 'Unknown User',
+                participantEmail: u.email || 'No email',
+                participantImage: u.profileImageUrl,
+                participantRole: u.role || 'member',
+                participantStatus: u.status || 'offline',
+                participantIsOnline: !!u.isOnline,
+                lastMessage: 'Start a conversation...',
+                timestamp: new Date(0),
+                unread: 0
+            }));
+
+            const conversationByParticipant = new Map(
+                transformedConversations
+                    .filter(conv => conv.participantId)
+                    .map(conv => [String(conv.participantId), conv])
+            );
+
+            const mergedRoster = placeholderUsers.map(item =>
+                conversationByParticipant.get(String(item.participantId)) || item
+            );
+
+            const additionalConversations = transformedConversations.filter(conv =>
+                !conv.participantId ||
+                !messagingUsers.some(u => String(u._id) === String(conv.participantId))
+            );
+
+            const finalConversations = [...mergedRoster, ...additionalConversations];
+            finalConversations.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            setConversations(finalConversations);
+
+            // Cache conversations
+            localStorage.setItem(`conversations_${user._id}`, JSON.stringify(finalConversations));
         } catch (error) {
             console.error('Failed to fetch conversations:', error);
             

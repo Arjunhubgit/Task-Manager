@@ -1,3 +1,5 @@
+import { BASE_URL } from "./apiPaths";
+
 export const getImageUrl = (url) => {
   if (!url) return null;
 
@@ -6,10 +8,8 @@ export const getImageUrl = (url) => {
     return url;
   }
 
-  // If it's a relative path from your Multer upload, prepend your backend BASE URL
-  // Replace 'http://localhost:5000' with your actual production backend URL later
-  const BACKEND_URL = "http://localhost:5000"; 
-  return `${BACKEND_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+  // If it's a relative path from your Multer upload, prepend backend URL.
+  return `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
 };
 
 export const validateEmail = (email) => {
