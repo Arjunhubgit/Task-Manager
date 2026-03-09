@@ -791,7 +791,7 @@ const UserMessages = () => {
     return (
         <>
             <Navbar />
-            <div className="flex h-[calc(100vh-120)] sm:h-[calc(100vh-100)] md:h-[calc(99vh-100px)] bg-gradient-to-br from-[#070c14] via-[#0b1421] to-[#060b12] rounded-lg sm:rounded-2xl md:rounded-[20px] border border-white/10 overflow-hidden shadow-[0_24px_80px_rgba(3,7,18,0.55)] relative">
+            <div className="mx-2 sm:mx-3 md:mx-4 flex h-[calc(100dvh-6.5rem)] sm:h-[calc(100dvh-7rem)] bg-gradient-to-br from-[#070c14] via-[#0b1421] to-[#060b12] rounded-lg sm:rounded-2xl md:rounded-[20px] border border-white/10 overflow-hidden shadow-[0_24px_80px_rgba(3,7,18,0.55)] relative">
 
                 {/* --- LEFT SIDEBAR --- */}
                 <div className={`w-full sm:w-72 md:w-80 lg:w-96 border-r border-white/10 flex-col bg-gradient-to-b from-[#0f1724]/95 via-[#0d1420]/95 to-[#0b111b]/95 backdrop-blur-2xl ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>

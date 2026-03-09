@@ -12,11 +12,48 @@
 @layer base {
   html {
     font-family: var(--font-display);
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   body {
     background-color: var(--color-primary);
     overflow-x: hidden;
+    line-height: 1.5;
+  }
+
+  img,
+  svg,
+  video,
+  canvas {
+    max-width: 100%;
+    height: auto;
+  }
+
+  input,
+  button,
+  textarea,
+  select {
+    font: inherit;
+  }
+}
+
+@media (max-width: 1024px) {
+  html {
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 768px) {
+  html {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  html {
+    font-size: 13px;
   }
 }
 
@@ -159,6 +196,12 @@ html, body, #root {
   padding: 0;
   background-color: #050505; /* Matches your Dark Theme background */
   overflow-x: hidden; /* Prevents horizontal scrolling */
+}
+
+@media (max-width: 768px) {
+  html, body, #root {
+    min-height: 100dvh;
+  }
 }
 
 /* Hide scrollbars globally while maintaining scroll functionality */

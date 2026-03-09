@@ -136,6 +136,7 @@ const SignUp = () => {
         name: result.user.displayName,
         email: result.user.email,
         googlePhotoUrl: result.user.photoURL,
+        googleUid: result.user.uid,
         inviteCode: inviteCode || undefined
       });
       updateUser(response.data);
@@ -203,7 +204,7 @@ const SignUp = () => {
   };
 
   return (
-    <div className="h-screen w-screen bg-[#050505] flex items-center justify-center p-4 md:p-8 overflow-hidden relative">
+    <div className="min-h-[100dvh] w-full bg-[#050505] flex items-center justify-center p-3 sm:p-4 md:p-8 overflow-x-hidden relative">
       {/* Ambient Background Glows */}
       <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-[#E88916]/5 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-purple-900/5 rounded-full blur-[120px] pointer-events-none" />
@@ -211,7 +212,7 @@ const SignUp = () => {
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-6xl h-full max-h-[850px] bg-[#121212] rounded-[32px] border border-white/5 shadow-2xl flex flex-col md:flex-row overflow-hidden z-10"
+        className="w-full max-w-6xl min-h-[620px] h-auto md:h-full max-h-[calc(100dvh-1.5rem)] md:max-h-[850px] bg-[#121212] rounded-[20px] sm:rounded-[32px] border border-white/5 shadow-2xl flex flex-col md:flex-row overflow-hidden z-10"
       >
         
         {/* LEFT SIDE: BRANDING/MARKETING */}
@@ -246,7 +247,7 @@ const SignUp = () => {
         </div>
 
         {/* RIGHT SIDE: FORM SECTION */}
-        <div className="w-full md:w-[55%] p-8 md:p-12 flex flex-col h-full overflow-y-auto custom-scrollbar bg-[#121212]">
+        <div className="w-full md:w-[55%] p-5 sm:p-8 md:p-12 flex flex-col h-full overflow-y-auto custom-scrollbar bg-[#121212]">
           <div className="flex items-center gap-2 mb-6 flex-shrink-0">
             <img src={logo} alt="ChronoFlow Logo" className="h-15" />
             <img src={title} alt="ChronoFlow Logo" className="h-20" />

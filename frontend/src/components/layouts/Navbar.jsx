@@ -163,12 +163,12 @@ const Navbar = ({ onMenuToggle, isMobileMenuOpen }) => {
     }, [teamCode, updateUser, user]);
 
     return (
-        <nav className="flex items-center justify-between px-4 sm:px-6 py-4 h-16 bg-[#050505]/80 backdrop-blur-xl border-b border-white/10 sticky top-0 z-[100] transition-all duration-300">
+        <nav className="flex items-center justify-between px-3 sm:px-6 py-2 sm:py-3 h-14 sm:h-16 bg-[#050505]/80 backdrop-blur-xl border-b border-white/10 sticky top-0 z-[100] transition-all duration-300">
 
             {/* Left Section: Mobile Toggle */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
                 <button
-                    className='lg:hidden text-gray-400 hover:text-[#EA8D23] focus:outline-none p-2 rounded-full transition-colors duration-200 hover:bg-white/5'
+                    className='lg:hidden text-gray-400 hover:text-[#EA8D23] focus:outline-none p-1.5 sm:p-2 rounded-full transition-colors duration-200 hover:bg-white/5'
                     onClick={handleMenuToggle}
                     aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
                 >
@@ -198,7 +198,7 @@ const Navbar = ({ onMenuToggle, isMobileMenuOpen }) => {
 
 
             {/* Right Section: Quick Create, Notifications, and User Profile */}
-            <div className="flex items-center gap-3" ref={profileRef}>
+            <div className="flex items-center gap-1.5 sm:gap-3" ref={profileRef}>
                 {user && (
                     <>
 
@@ -214,7 +214,7 @@ const Navbar = ({ onMenuToggle, isMobileMenuOpen }) => {
                         <button
                             onClick={handleEmailClick}
                             disabled={isLoadingMessages}
-                            className="relative p-2.5 rounded-xl text-gray-400 hover:text-orange-400 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-all duration-200 active:scale-95 group"
+                            className="relative hidden sm:inline-flex p-2.5 rounded-xl text-gray-400 hover:text-orange-400 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-all duration-200 active:scale-95 group"
                             title={messageError ? 'Failed to load messages' : 'Messages'}
                             aria-label="Messages"
                         >
@@ -249,7 +249,7 @@ const Navbar = ({ onMenuToggle, isMobileMenuOpen }) => {
                         {/* Profile Button */}
                         <button
                             onClick={() => setIsProfileOpen(!isProfileOpen)}
-                            className="flex items-center gap-3 pl-2 pr-4 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 hover:border-orange-500/30 transition-all duration-300 group active:scale-95 hover:shadow-lg hover:shadow-orange-500/10"
+                            className="flex items-center gap-2 sm:gap-3 pl-1.5 sm:pl-2 pr-2.5 sm:pr-4 py-1 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 hover:border-orange-500/30 transition-all duration-300 group active:scale-95 hover:shadow-lg hover:shadow-orange-500/10"
                         >
                             {/* Avatar Container */}
                             <div className="relative">
@@ -258,10 +258,10 @@ const Navbar = ({ onMenuToggle, isMobileMenuOpen }) => {
                                         // FIX: Use the helper to resolve the URL correctly
                                         src={getImageUrl(user.profileImageUrl)}
                                         alt={user.name}
-                                        className="w-10 h-10 rounded-full object-cover border-2 border-orange-500/20 group-hover:border-orange-500/50 transition-colors"
+                                        className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover border-2 border-orange-500/20 group-hover:border-orange-500/50 transition-colors"
                                     />
                                 ) : (
-                                    <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center border-2 border-orange-500/20 text-[#EA8D23]">
+                                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-orange-500/10 flex items-center justify-center border-2 border-orange-500/20 text-[#EA8D23]">
                                         <UserIcon className="w-5 h-5" />
                                     </div>
                                 )}
@@ -282,7 +282,7 @@ const Navbar = ({ onMenuToggle, isMobileMenuOpen }) => {
 
                         {/* Dropdown Menu */}
                         <div className={`
-                            absolute right-0 top-full mt-3 w-56 bg-[#0A0A0A] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 transform transition-all duration-300 origin-top-right
+                            absolute right-0 top-full mt-3 w-52 sm:w-56 max-w-[calc(100vw-1rem)] bg-[#0A0A0A] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 transform transition-all duration-300 origin-top-right
                             ${isProfileOpen ? 'opacity-100 scale-100 translate-y-0 visible' : 'opacity-0 scale-95 -translate-y-3 invisible pointer-events-none'}
                         `}>
                             {/* User Info Section */}

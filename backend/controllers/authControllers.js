@@ -3,10 +3,38 @@ const AdminInvite = require("../models/AdminInvite");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { createNotification } = require("../utils/notificationService");
+const {
+    hasCloudinaryConfig,
+    toSafePublicId,
+    uploadImageUrlToCloudinary
+} = require("../utils/cloudinaryUpload");
 
 // Generate JWT Token
 const generateToken = (userId) => {
     return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "7d" });
+};
+
+const persistGooglePhotoUrl = async ({ googlePhotoUrl, email }) => {
+    if (!googlePhotoUrl) return null;
+
+    // Fallback to Google URL when Cloudinary is not configured.
+    if (!hasCloudinaryConfig()) return googlePhotoUrl;
+
+    try {
+        const safePublicId = toSafePublicId(email || `user_${Date.now()}`) || `user_${Date.now()}`;
+        const uploadedImage = await uploadImageUrlToCloudinary({
+            imageUrl: googlePhotoUrl,
+            folder: "taskmanager/profile-pictures/google",
+            publicId: `google_${safePublicId}`,
+            overwrite: true,
+            invalidate: true,
+        });
+
+        return uploadedImage.secure_url || googlePhotoUrl;
+    } catch (error) {
+        console.error("Google profile image Cloudinary upload failed:", error.message);
+        return googlePhotoUrl;
+    }
 };
 
 // /**
@@ -176,14 +204,20 @@ const loginUser = async (req, res) => {
 
 const googleLogin = async (req, res) => {
     try {
-        const { email, name, googlePhotoUrl, inviteCode } = req.body;
+        const { email, name, googlePhotoUrl, inviteCode, googleUid } = req.body;
         let user = await User.findOne({ email });
+        const persistedPhotoUrl = await persistGooglePhotoUrl({ googlePhotoUrl, email });
 
         if (user) {
-            // --- FIX: Refresh the Google photo URL and set status to online ---
+            // Persist avatar and keep status in sync for existing Google users.
             user.isOnline = true;
             user.status = 'online'; 
-            user.profileImageUrl = googlePhotoUrl; // Always update with the latest URL from Google
+            if (persistedPhotoUrl) {
+                user.profileImageUrl = persistedPhotoUrl;
+            }
+            if (googleUid) {
+                user.googleId = googleUid;
+            }
             await user.save();
 
             res.json({
@@ -251,8 +285,8 @@ const googleLogin = async (req, res) => {
                 name,
                 email,
                 password: null, // Google users don't have a password
-                profileImageUrl: googlePhotoUrl,
-                googleId: googlePhotoUrl, // Store to identify as Google user
+                profileImageUrl: persistedPhotoUrl || null,
+                googleId: googleUid || email, // Store to identify as Google user
                 role: userRole,
                 parentAdminId,
                 isOnline: true,

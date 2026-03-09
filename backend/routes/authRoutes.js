@@ -13,6 +13,7 @@ const {
 const { protect } = require("../middlewares/authMiddleware");
 const router = express.Router();
 const upload = require("../middlewares/uploadMiddleware");
+const { uploadBufferImageToCloudinary } = require("../utils/cloudinaryUpload");
 
 
 // Auth Routes
@@ -31,15 +32,29 @@ router.put("/profile", protect, updateUserProfile);
 
 // Image Upload Route
 router.post("/upload-image", (req, res, next) => {
-    upload.single("image")(req, res, (err) => {
+    upload.single("image")(req, res, async (err) => {
         if (err) {
             return res.status(400).json({ message: err.message || "File upload failed" });
         }
         if (!req.file) {
             return res.status(400).json({ message: "No file uploaded" });
         }
-        const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-        res.status(200).json({ imageUrl });
+
+        try {
+            const uploadedImage = await uploadBufferImageToCloudinary({
+                buffer: req.file.buffer,
+                mimeType: req.file.mimetype,
+                folder: "taskmanager/profile-pictures"
+            });
+
+            return res.status(200).json({ imageUrl: uploadedImage.secure_url });
+        } catch (uploadError) {
+            console.error("Profile image Cloudinary upload failed:", uploadError.message);
+            return res.status(500).json({
+                message: "Image upload failed. Please verify Cloudinary configuration.",
+                error: uploadError.message
+            });
+        }
     });
 });
 

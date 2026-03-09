@@ -77,7 +77,7 @@ const SideMenu = ({ activeMenu, isMobile, onMobileClose }) => {
   // --- Unified Menu Body ---
   const menuBody = (
     <nav className={`
-        h-screen flex flex-col transition-all duration-300 ease-in-out relative
+        h-[100dvh] flex flex-col transition-all duration-300 ease-in-out relative
         bg-[#050505] border-r border-white/10
         ${isCollapsed ? "w-20 items-center" : "w-64"}
     `}>
@@ -152,7 +152,7 @@ const SideMenu = ({ activeMenu, isMobile, onMobileClose }) => {
       {!isMobile && (
         <>
           <div className={`
-            hidden lg:flex fixed top-[4.5rem] z-50 transition-all duration-300 ease-in-out
+            hidden lg:flex fixed top-14 sm:top-16 z-50 transition-all duration-300 ease-in-out
             ${isCollapsed ? "left-[65px]" : "left-[256px]"}
           `}>
             <button
@@ -165,7 +165,7 @@ const SideMenu = ({ activeMenu, isMobile, onMobileClose }) => {
           </div>
 
           <div className={`
-            hidden lg:flex h-screen sticky top-0 transition-all duration-300 ease-in-out flex-shrink-0
+            hidden lg:flex h-[100dvh] sticky top-0 transition-all duration-300 ease-in-out flex-shrink-0
             ${isCollapsed ? 'w-[80px]' : 'w-[264px]'}
           `}>
             {menuBody}
@@ -175,7 +175,7 @@ const SideMenu = ({ activeMenu, isMobile, onMobileClose }) => {
 
       {/* Mobile Wrapper */}
       {isMobile && (
-        <div className="w-64 h-full bg-[#050505] shadow-2xl shadow-black/50 border-r border-white/10 flex flex-col">
+        <div className="w-[85vw] max-w-64 h-full bg-[#050505] shadow-2xl shadow-black/50 border-r border-white/10 flex flex-col">
           {menuBody}
         </div>
       )}

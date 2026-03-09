@@ -110,6 +110,7 @@ const Login = () => {
         name: result.user.displayName,
         email: result.user.email,
         googlePhotoUrl: result.user.photoURL,
+        googleUid: result.user.uid,
       });
       handleAuthSuccess(response.data);
     } catch (err) {
@@ -129,7 +130,7 @@ const Login = () => {
 
   return (
     // FIX 1: Strict `h-screen` and `overflow-hidden` for absolute zero scroll
-    <div className="h-screen w-full bg-[#0B0F19] flex items-center justify-center relative overflow-hidden p-4 md:p-6 font-sans text-slate-200">
+    <div className="min-h-[100dvh] w-full bg-[#0B0F19] flex items-center justify-center relative overflow-x-hidden p-3 sm:p-4 md:p-6 font-sans text-slate-200">
       
       <style>{`
         .premium-gradient-text {
@@ -154,10 +155,10 @@ const Login = () => {
       <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] pointer-events-none"></div>
 
       {/* Host Access Portal */}
-      <div className="absolute top-6 right-6 md:top-8 md:right-10 z-50">
+      <div className="absolute top-4 right-4 sm:top-6 sm:right-6 md:top-8 md:right-10 z-50">
         <button 
           onClick={() => navigate("/host-login")}
-          className="flex items-center gap-2 px-5 py-2.5 bg-white/[0.03] border border-white/10 rounded-full text-[10px] font-bold tracking-[2px] text-gray-400 hover:bg-[#FF8C00] hover:text-black hover:border-[#FF8C00] transition-all duration-300 backdrop-blur-md"
+          className="flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-2 sm:py-2.5 bg-white/[0.03] border border-white/10 rounded-full text-[9px] sm:text-[10px] font-bold tracking-[1.4px] sm:tracking-[2px] text-gray-400 hover:bg-[#FF8C00] hover:text-black hover:border-[#FF8C00] transition-all duration-300 backdrop-blur-md"
         >
           HOST PORTAL <FaChevronRight className="text-[8px]" />
         </button>
@@ -168,12 +169,12 @@ const Login = () => {
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.8, ease: "easeOut" }}
-        className="relative z-10 w-full max-w-[1050px] h-[600px] max-h-[90vh] bg-[rgba(20,20,25,0.6)] backdrop-blur-[20px] border border-white/[0.08] rounded-[20px] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8)] flex flex-col lg:flex-row overflow-hidden"
+        className="relative z-10 w-full max-w-[1050px] min-h-[560px] h-auto sm:h-[600px] max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] bg-[rgba(20,20,25,0.6)] backdrop-blur-[20px] border border-white/[0.08] rounded-[16px] sm:rounded-[20px] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8)] flex flex-col lg:flex-row overflow-hidden"
       >
         
         {/* LEFT SECTION: Form Interface */}
         {/* FIX 3: Optimized padding for compact layout */}
-        <div className="w-full h-full lg:w-[45%] p-6 md:p-7 flex flex-col justify-center relative z-20 overflow-y-auto">
+        <div className="w-full h-full lg:w-[45%] p-5 sm:p-6 md:p-7 flex flex-col justify-center relative z-20 overflow-y-auto">
           
           <div className="flex items-center gap-2 mb-3 h-7">
             <img src={logo} alt="Chronoflow Logo" className="h-12 object-contain drop-shadow-[0_0_8px_rgba(255,140,0,0.5)]" />
@@ -181,8 +182,8 @@ const Login = () => {
           </div>
 
           <div className="mb-4">
-            <h1 className="text-2xl font-bold text-white tracking-tight">Welcome Back</h1>
-            <p className="text-gray-400 text-[15px] mt-0.5">Initialize your session to continue.</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Welcome Back</h1>
+            <p className="text-gray-400 text-sm sm:text-[15px] mt-0.5">Initialize your session to continue.</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-2.5">

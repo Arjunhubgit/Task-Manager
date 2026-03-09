@@ -13,7 +13,7 @@ const DashboardLayout = ({ children, activeMenu }) => {
     };
 
     return (
-        <div className="min-h-screen bg-[#050505] text-gray-200 font-sans selection:bg-orange-500/30 selection:text-orange-200 flex flex-col">
+        <div className="min-h-[100dvh] bg-[#050505] text-gray-200 font-sans selection:bg-orange-500/30 selection:text-orange-200 flex flex-col">
             
             <Navbar 
                 activeMenu={activeMenu} 
@@ -22,7 +22,7 @@ const DashboardLayout = ({ children, activeMenu }) => {
             />
 
             {user && (
-                <div className="flex flex-1 h-[calc(100vh-4.5rem)]"> {/* Adjusted height for slightly taller navbar */}
+                <div className="flex flex-1 min-h-0"> {/* Keeps content scrollable without clipping on mobile browsers */}
                     
                     {/* Desktop Sidebar */}
                     <SideMenu activeMenu={activeMenu} isMobile={false} />
@@ -59,11 +59,11 @@ const DashboardLayout = ({ children, activeMenu }) => {
                     </div>
 
                     {/* Main Content Area */}
-                    <div className="flex-1 overflow-auto custom-scrollbar relative">
+                    <div className="flex-1 min-w-0 overflow-auto custom-scrollbar relative">
                         {/* Subtle background gradient for depth in content area */}
                         <div className="fixed top-20 right-0 w-[30vw] h-[30vw] bg-purple-900/5 rounded-full blur-[100px] pointer-events-none" />
                         
-                        <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto relative z-10">
+                        <div className="px-3 py-4 sm:px-4 md:p-6 lg:p-8 max-w-7xl mx-auto relative z-10">
                             {children}
                         </div>
                     </div>
