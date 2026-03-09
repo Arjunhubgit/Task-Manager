@@ -156,8 +156,13 @@ npm run dev
 ## Author
 
 - Name: Arjun Sharma
+<<<<<<< HEAD
 - GitHub: `https://github.com/<your-github-username>`
 - LinkedIn: `https://www.linkedin.com/in/<your-linkedin-id>`
+=======
+- GitHub: https://github.com/Arjunhubgit
+- LinkedIn: https://www.linkedin.com
+>>>>>>> 587a66384d1f1407e8bded8e2fd7dbf111f4eee9
 
 ## License
 

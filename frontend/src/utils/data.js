@@ -47,7 +47,7 @@ export const SIDE_MENU_DATA = [
     icon: LuTrendingUp,
     path: "/admin/performance",
   },
-  {
+   {
     id: "07",
     label: "Messages",
     icon: FaRegMessage,
