@@ -9,7 +9,7 @@ import {
   LuCalendarClock,
   LuSunMedium
 } from "react-icons/lu";
-import { FaChartColumn,  } from "react-icons/fa6";
+import { FaChartColumn, FaRegMessage } from "react-icons/fa6";
 export const SIDE_MENU_DATA = [
   {
     id: "01",
@@ -48,6 +48,12 @@ export const SIDE_MENU_DATA = [
     path: "/admin/performance",
   },
   {
+    id: "07",
+    label: "Messages",
+    icon: FaRegMessage,
+    path: "/admin/messages",
+  },
+  {
     id: "09",
     label: "Notifications",
     icon: LuBell,
@@ -79,6 +85,12 @@ export const SIDE_MENU_USER_DATA = [
     label: "Task Calendar",
     icon: LuCalendarClock,
     path: "/user/calendar",
+  },
+  {
+    id: "05",
+    label: "Messages",
+    icon: FaRegMessage,
+    path: "/user/messages",
   },
   {
     id: "06",

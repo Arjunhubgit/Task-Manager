@@ -214,14 +214,14 @@ const Navbar = ({ onMenuToggle, isMobileMenuOpen }) => {
                         <button
                             onClick={handleEmailClick}
                             disabled={isLoadingMessages}
-                            className="relative hidden sm:inline-flex p-2.5 rounded-xl text-gray-400 hover:text-orange-400 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-all duration-200 active:scale-95 group"
+                            className="relative inline-flex p-2 sm:p-2.5 rounded-xl text-gray-400 hover:text-orange-400 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/5 transition-all duration-200 active:scale-95 group"
                             title={messageError ? 'Failed to load messages' : 'Messages'}
                             aria-label="Messages"
                         >
                             {isLoadingMessages ? (
-                                <Loader className="w-5 h-5 animate-spin" />
+                                <Loader className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
                             ) : (
-                                <Mail className="w-5 h-5 group-hover:animate-bounce" />
+                                <Mail className="w-4 h-4 sm:w-5 sm:h-5 group-hover:animate-bounce" />
                             )}
 
                             {/* Unread Badge */}
