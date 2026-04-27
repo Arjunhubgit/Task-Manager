@@ -57,11 +57,14 @@ ChronoFlow is a role-based productivity platform built for modern teams with **r
 
 | Login | Dashboard |
 |------|------|
-| ![Login](./docs/screenshots/login.png) | ![Dashboard](./docs/screenshots/dashboard.png) |
+|<img width="1699" height="877" alt="Screenshot 2026-02-25 152124" src="https://github.com/user-attachments/assets/a1a218d3-3bd2-4bcd-9464-e436abef1094" /> |
+|<img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/9141e91d-3033-4b15-856d-16c5cd3a523e" /> |
+
 
 | Task Board | Team Chat |
 |------|------|
-| ![Tasks](./docs/screenshots/tasks.png) | ![Chat](./docs/screenshots/chat.png) |
+| <img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/5703122d-db6e-477c-9497-35e7b9512767" />
+ | <img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/0363d2ac-5598-4c45-bddb-f0dde779ad67" /> |
 
 ## Tech Stack
 
