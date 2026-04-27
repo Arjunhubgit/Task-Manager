@@ -13,9 +13,7 @@ ChronoFlow is a role-based productivity platform built for modern teams with **r
 
 ## Live Links
 
-- Frontend Demo: `Add your deployed frontend URL here`
-- Backend API: `Add your deployed backend URL here`
-- Walkthrough Video: `Add YouTube/Loom link here`
+- Frontend Demo: https://chronoflow-pn4c.onrender.com
 
 ## What Makes It Different
 
@@ -156,10 +154,8 @@ npm run dev
 ## Author
 
 - Name: Arjun Sharma
+  
 <<<<<<< HEAD
-- GitHub: `https://github.com/<your-github-username>`
-- LinkedIn: `https://www.linkedin.com/in/<your-linkedin-id>`
-=======
 - GitHub: https://github.com/Arjunhubgit
 - LinkedIn: https://www.linkedin.com
 >>>>>>> 587a66384d1f1407e8bded8e2fd7dbf111f4eee9
