@@ -19,6 +19,7 @@ import HostLogin from './pages/Auth/HostLogin';
 import Dashboard from './pages/Admin/Dashboard';
 import ManageTask from './pages/Admin/ManageTask';
 import CreateTask from './pages/Admin/CreateTask';
+import SelfTasks from './pages/Admin/SelfTasks';
 import ManageUser from './pages/Admin/ManageUsers';
 import AdminMessages from './pages/Admin/AdminMessages'; // Keeping this as it was in your snippet
 import Reports from './pages/Admin/Reports';
@@ -61,6 +62,7 @@ const App = () => {
             {/* THIS ROUTE MUST EXIST FOR THE REDIRECT TO WORK */}
             <Route path='admin/tasks' element={<ManageTask />} />
             <Route path='admin/create-task' element={<CreateTask />} />
+            <Route path='admin/self-tasks' element={<SelfTasks />} />
             <Route path='admin/users' element={<ManageUser />} />
             <Route path='admin/messages' element={<AdminMessages />} />
             <Route path='admin/reports' element={<Reports />} />

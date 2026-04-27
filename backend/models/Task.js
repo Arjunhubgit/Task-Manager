@@ -28,6 +28,7 @@ const taskSchema = new mongoose.Schema(
     description: { type: String },
     priority: { type: String, enum: ["Low", "Medium", "High"], default: "Low" },
     status: { type: String, enum: ["Pending", "In Progress", "Completed"], default: "Pending" },
+    scope: { type: String, enum: ["team", "self"], default: "team" },
     dueDate: { type: Date, required: true },
     assignedTo: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },

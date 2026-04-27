@@ -3,6 +3,10 @@ const User = require("../models/User");
 const excelJS = require("exceljs");
 const AuditLog = require("../models/AuditLog");
 
+const buildTeamScopeFilter = () => ({
+    $or: [{ scope: "team" }, { scope: { $exists: false } }],
+});
+
 
 // @desc    Exports all tasks report as Excel
 // @route   GET /api/reports/export/tasks
@@ -10,7 +14,7 @@ const AuditLog = require("../models/AuditLog");
 
 const exportTasksReport = async (req, res) => {
     try {
-        const tasks = await Task.find().populate("assignedTo", "name email");
+        const tasks = await Task.find(buildTeamScopeFilter()).populate("assignedTo", "name email");
 
         const workbook = new excelJS.Workbook();
         const worksheet = workbook.addWorksheet("Tasks Report");
@@ -81,7 +85,7 @@ const exportTasksReport = async (req, res) => {
 const exportUsersReport = async (req, res) => {
     try {
         const users = await User.find().select("name email _id").lean();
-        const userTasks = await Task.find().populate(
+        const userTasks = await Task.find(buildTeamScopeFilter()).populate(
             "assignedTo",
             "name email _id"
         );

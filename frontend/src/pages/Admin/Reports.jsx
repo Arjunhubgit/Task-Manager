@@ -144,7 +144,7 @@ const Reports = () => {
 
       const [usersResponse, tasksResponse] = await Promise.all([
         axiosInstance.get(API_PATHS.USERS.GET_ALL_USERS),
-        axiosInstance.get(API_PATHS.TASKS.GET_ALL_TASKS),
+        axiosInstance.get(API_PATHS.TASKS.GET_ALL_TASKS, { params: { scope: "team" } }),
       ]);
 
       setTeamMembers(extractUsers(usersResponse.data));

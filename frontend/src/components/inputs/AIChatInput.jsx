@@ -83,7 +83,10 @@ const AIChatInput = ({ onTaskCreated, onTaskDraftGenerated }) => {
       }
 
       // Fallback flow (if draft callback is not provided): create directly.
-      const response = await axiosInstance.post(API_PATHS.TASKS.CREATE_TASK, updatedTask);
+      const response = await axiosInstance.post(API_PATHS.TASKS.CREATE_TASK, {
+        ...updatedTask,
+        scope: "team",
+      });
       setShowSuggestions(false);
       setPendingTask(null);
       toast.success("Task created with AI enhancements!");

@@ -90,6 +90,31 @@ const canUserAccessTask = (task, user) => {
     return (task.assignedTo || []).some((userId) => userId.toString() === user._id.toString());
 };
 
+const buildTeamScopeFilter = () => ({
+    $or: [{ scope: "team" }, { scope: { $exists: false } }],
+});
+
+const combineFilters = (...filters) => {
+    const validFilters = filters.filter((filter) => filter && Object.keys(filter).length > 0);
+    if (validFilters.length === 0) return {};
+    if (validFilters.length === 1) return validFilters[0];
+    return { $and: validFilters };
+};
+
+const buildScopeFilterForUser = (user, scopeQuery) => {
+    const normalizedScope = String(scopeQuery || "").trim().toLowerCase();
+
+    if (user?.role === "admin") {
+        if (normalizedScope === "self") {
+            return { scope: "self", createdBy: user._id };
+        }
+        return buildTeamScopeFilter();
+    }
+
+    // Non-admins should never see admin self tasks.
+    return buildTeamScopeFilter();
+};
+
 const notifyTaskStatusUpdate = async (task, actorId, previousStatus, nextStatus, actorName) => {
     const recipients = getTaskRecipients(task);
     const content = buildTaskStatusUpdateCopy({
@@ -195,42 +220,48 @@ const getAIPriorityAndSummary = async (taskDescription, userRole) => {
 // @desc    Get all tasks
 const getTasks = async (req, res) => {
     try {
-        const { status, assignedTo, priority, dueFrom, dueTo, hasChecklist, hasComments, tags } = req.query;
-        let filter = {};
-        if (status) filter.status = status;
-        if (assignedTo) filter.assignedTo = assignedTo;
-        if (priority) filter.priority = priority;
+        const { status, assignedTo, priority, dueFrom, dueTo, hasChecklist, hasComments, tags, scope } = req.query;
+        let queryFilter = {};
+
+        if (priority) queryFilter.priority = priority;
         if (tags) {
-            filter.tags = { $in: String(tags).split(",").map((tag) => tag.trim()).filter(Boolean) };
+            queryFilter.tags = { $in: String(tags).split(",").map((tag) => tag.trim()).filter(Boolean) };
         }
         if (dueFrom || dueTo) {
-            filter.dueDate = {};
-            if (dueFrom) filter.dueDate.$gte = new Date(dueFrom);
-            if (dueTo) filter.dueDate.$lte = new Date(dueTo);
+            queryFilter.dueDate = {};
+            if (dueFrom) queryFilter.dueDate.$gte = new Date(dueFrom);
+            if (dueTo) queryFilter.dueDate.$lte = new Date(dueTo);
         }
         if (hasChecklist === "true") {
-            filter.todoChecklist = { $exists: true, $not: { $size: 0 } };
+            queryFilter.todoChecklist = { $exists: true, $not: { $size: 0 } };
         }
         if (hasComments === "true") {
-            filter.comments = { $exists: true, $not: { $size: 0 } };
+            queryFilter.comments = { $exists: true, $not: { $size: 0 } };
         }
 
-        let tasks;
-        if (req.user.role === "admin") {
-            tasks = await Task.find(filter).populate("assignedTo", "name email profileImageUrl");
-        } else {
-            tasks = await Task.find({ ...filter, assignedTo: req.user._id }).populate("assignedTo", "name email profileImageUrl");
+        // For admins, support query-based assignee filtering.
+        // For non-admins, always force to their own assigned tasks.
+        if (req.user.role === "admin" && assignedTo) {
+            queryFilter.assignedTo = assignedTo;
+        } else if (req.user.role !== "admin") {
+            queryFilter.assignedTo = req.user._id;
         }
-        
+
+        const scopeFilter = buildScopeFilterForUser(req.user, scope);
+        const baseFilter = combineFilters(queryFilter, scopeFilter);
+        const listFilter = status ? combineFilters(baseFilter, { status }) : baseFilter;
+
+        let tasks = await Task.find(listFilter).populate("assignedTo", "name email profileImageUrl");
+
         tasks = await Promise.all(tasks.map(async (task) => {
             const completedCount = task.todoChecklist.filter(item => item.completed).length;
             return { ...task._doc, completedTodoCount: completedCount };
         }));
 
-        const allTasks = await Task.countDocuments(req.user.role === "admin" ? {} : { assignedTo: req.user._id });
-        const pendingTasks = await Task.countDocuments({ ...(req.user.role !== "admin" && { assignedTo: req.user._id }), status: "Pending" });
-        const inProgressTasks = await Task.countDocuments({ ...(req.user.role !== "admin" && { assignedTo: req.user._id }), status: "In Progress" });
-        const completedTasks = await Task.countDocuments({ ...(req.user.role !== "admin" && { assignedTo: req.user._id }), status: "Completed" });
+        const allTasks = await Task.countDocuments(baseFilter);
+        const pendingTasks = await Task.countDocuments(combineFilters(baseFilter, { status: "Pending" }));
+        const inProgressTasks = await Task.countDocuments(combineFilters(baseFilter, { status: "In Progress" }));
+        const completedTasks = await Task.countDocuments(combineFilters(baseFilter, { status: "Completed" }));
         
         res.json({
             tasks,
@@ -270,10 +301,15 @@ const getTaskById = async (req, res) => {
 // @desc    Create a new task
 const createTask = async (req, res) => {
     try {
-        let { title, description, priority, dueDate, assignedTo, todoChecklist, attachments, aiSummary } = req.body;
+        let { title, description, priority, dueDate, assignedTo, todoChecklist, attachments, aiSummary, scope } = req.body;
+        const normalizedScope = String(scope || "team").trim().toLowerCase() === "self" ? "self" : "team";
+
+        if (normalizedScope === "self") {
+            assignedTo = [req.user._id];
+        }
 
         if (!Array.isArray(assignedTo) || assignedTo.length === 0) {
-             return res.status(400).json({ message: "Task must be assigned to at least one user." });
+            return res.status(400).json({ message: "Task must be assigned to at least one user." });
         }
         
         // Initialize AI analysis object
@@ -323,6 +359,7 @@ const createTask = async (req, res) => {
             title, 
             description, 
             priority: priority || 'Medium', 
+            scope: normalizedScope,
             dueDate, 
             assignedTo,
             createdBy: req.user._id, 
@@ -343,7 +380,7 @@ const createTask = async (req, res) => {
             req.user._id,
             "CREATE_TASK",
             `Task: ${task.title}`,
-            { taskId: task._id, priority, assignedTo },
+            { taskId: task._id, priority, assignedTo, scope: normalizedScope },
             req
         );
 
@@ -641,13 +678,19 @@ const getTaskComments = async (req, res) => {
 // @desc    Dashboard data (Admin)
 const getDashboardData = async (req, res) => {
     try {
-        const totalTasks = await Task.countDocuments();
-        const pendingTasks = await Task.countDocuments({ status: "Pending" });
-        const completedTasks = await Task.countDocuments({ status: "Completed" });
-        const overdueTasks = await Task.countDocuments({ status: { $ne: "Completed" }, dueDate: { $lt: new Date() } });
+        const teamScopeFilter = buildTeamScopeFilter();
+        const totalTasks = await Task.countDocuments(teamScopeFilter);
+        const pendingTasks = await Task.countDocuments(combineFilters(teamScopeFilter, { status: "Pending" }));
+        const completedTasks = await Task.countDocuments(combineFilters(teamScopeFilter, { status: "Completed" }));
+        const overdueTasks = await Task.countDocuments(
+            combineFilters(teamScopeFilter, { status: { $ne: "Completed" }, dueDate: { $lt: new Date() } })
+        );
 
         const taskStatuses = ["Pending", "In Progress", "Completed"];
-        const taskDistributionRaw = await Task.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]);
+        const taskDistributionRaw = await Task.aggregate([
+            { $match: teamScopeFilter },
+            { $group: { _id: "$status", count: { $sum: 1 } } },
+        ]);
         const taskDistribution = taskStatuses.reduce((acc, status) => {
             acc[status.replace(/\s+/g, "")] = taskDistributionRaw.find(i => i._id === status)?.count || 0;
             return acc;
@@ -655,13 +698,16 @@ const getDashboardData = async (req, res) => {
         taskDistribution["All"] = totalTasks; 
 
         const taskPriorities = ["Low", "Medium", "High"];
-        const taskPriorityLevelsRaw = await Task.aggregate([{ $group: { _id: "$priority", count: { $sum: 1 } } }]);
+        const taskPriorityLevelsRaw = await Task.aggregate([
+            { $match: teamScopeFilter },
+            { $group: { _id: "$priority", count: { $sum: 1 } } },
+        ]);
         const taskPriorityLevels = taskPriorities.reduce((acc, priority) => {
             acc[priority] = taskPriorityLevelsRaw.find(i => i._id === priority)?.count || 0;
             return acc;
         }, {});
 
-        const recentTasks = await Task.find().sort({ createdAt: -1 }).limit(10)
+        const recentTasks = await Task.find(teamScopeFilter).sort({ createdAt: -1 }).limit(10)
             .select("title description status priority dueDate assignedTo createdAt")
             .populate("assignedTo", "name email profileImageUrl");
 

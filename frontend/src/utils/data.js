@@ -31,24 +31,30 @@ export const SIDE_MENU_DATA = [
   },
   {
     id: "04",
+    label: "Self Tasks",
+    icon: LuSunMedium,
+    path: "/admin/self-tasks",
+  },
+  {
+    id: "05",
     label: "Team Members",
     icon: LuUsers,
     path: "/admin/users",
   },
   {
-    id: "05",
+    id: "06",
     label: "Reports & Analytics",
     icon: FaChartColumn,
     path: "/admin/reports",
   },
   {
-    id: "06",
+    id: "07",
     label: "Team Performance",
     icon: LuTrendingUp,
     path: "/admin/performance",
   },
    {
-    id: "07",
+    id: "08",
     label: "Messages",
     icon: FaRegMessage,
     path: "/admin/messages",

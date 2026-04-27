@@ -102,6 +102,7 @@ const CreateTask = () => {
       // The backend only uses AI if priority is missing or empty
       await axiosInstance.post(API_PATHS.TASKS.CREATE_TASK, {
         ...taskData,
+        scope: "team",
         dueDate: new Date(taskData.dueDate).toISOString(),
         todoChecklist: todoList,
       });

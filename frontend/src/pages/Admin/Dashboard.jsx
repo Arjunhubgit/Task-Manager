@@ -104,7 +104,9 @@ const Dashboard = () => {
   const getTaskActivityData = async () => {
     setIsActivityLoading(true);
     try {
-      const response = await axiosInstance.get(API_PATHS.TASKS.GET_ALL_TASKS);
+      const response = await axiosInstance.get(API_PATHS.TASKS.GET_ALL_TASKS, {
+        params: { scope: "team" },
+      });
       if (response?.data?.tasks) {
         setActivityTasks(response.data.tasks);
       }

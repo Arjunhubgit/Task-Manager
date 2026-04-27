@@ -84,7 +84,7 @@ const TeamPerformance = () => {
 
       const [usersResponse, tasksResponse] = await Promise.all([
         axiosInstance.get(API_PATHS.USERS.GET_ALL_USERS),
-        axiosInstance.get(API_PATHS.TASKS.GET_ALL_TASKS),
+        axiosInstance.get(API_PATHS.TASKS.GET_ALL_TASKS, { params: { scope: "team" } }),
       ]);
 
       const users = extractUsers(usersResponse.data);

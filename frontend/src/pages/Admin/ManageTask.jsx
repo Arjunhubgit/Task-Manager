@@ -38,6 +38,7 @@ const ManageTasks = () => {
       const response = await axiosInstance.get(API_PATHS.TASKS.GET_ALL_TASKS, {
         params: {
           status: filterStatus === "All" ? "" : filterStatus,
+          scope: "team",
         },
       });
 
@@ -161,7 +162,7 @@ const ManageTasks = () => {
       // Fetch tasks specifically assigned to this user
       // Note: This relies on the backend update we did in Step 1
       const response = await axiosInstance.get(API_PATHS.TASKS.GET_ALL_TASKS, {
-        params: { assignedTo: user._id } 
+        params: { assignedTo: user._id, scope: "team" } 
       });
       setUserTasks(response.data?.tasks || []);
     } catch (error) {
